@@ -1,0 +1,10 @@
+[project]
+name = "exfr-lgp"
+version = "0.1.0"
+description = "Exact finite-rank logistic Gaussian process for conditional density estimation (arXiv 2610.09452)"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = ["jax", "numpy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

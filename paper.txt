@@ -1,0 +1,2549 @@
+                                                 Finite-Rank Logistic Gaussian Processes with
+                                                   Exact Likelihood for Conditional Density
+                                                                  Estimation
+                                          Jaehoan Kim∗1 , Indrajit Ghosh∗2 , Debdeep Pati3 , and Dipankar Bandyopadhyay†4
+                                                        1
+                                                    Department of Statistical Science, Duke University, Durham, NC
+arXiv:2610.09452v1 [stat.ME] 7 Oct 2026
+
+
+
+
+                                                    2
+                                                   Global Statistical Sciences, Eli Lilly and Company, Indianapolis, IN
+                                               3
+                                                 Department of Statistics, University of Wisconsin-Madison, Madison, WI
+                                           4
+                                             Department of Biostatistics, Virginia Commonwealth University, Richmond, VA
+
+                                                                                         October 8, 2026
+
+
+
+                                                                                               Abstract
+                                                     Conditional density estimation describes how the entire distribution of a response changes
+                                                 with covariates, and in imaging studies also with location. Logistic Gaussian processes (LGP)
+                                                 give a flexible prior for such densities. However, the normalizing constant of an LGP has no
+                                                 closed form, so existing methods approximate or replace the likelihood. We propose the exact
+                                                 likelihood finite-rank LGP (ExFR-LGP), which writes the log density as the sum of two bivariate
+                                                 functions, one of the response and a location-varying linear index of the covariates, and one of
+                                                 the response and the location. Each function is assigned a finite-rank Gaussian process prior that
+                                                 is piecewise linear on a regular grid, enabling the normalizing constant, the conditional mean
+                                                 and the quantiles to enjoy closed form representations. Posterior samples are drawn from the
+                                                 exact posterior under this prior via a Gibbs sampler that updates the Gaussian components by
+                                                 elliptical slice sampling. When the true log density is the sum of two such bivariate functions, we
+                                                 show that the posterior contracts at the minimax rate of an α-smooth bivariate density up to a
+                                                 logarithmic factor. Numerical experiments using synthetic data demonstrate the effectiveness of
+                                                 ExFR-LGP in conditional density estimation. Furthermore, application to fractional anisotropy
+                                                 responses along the corpus callosum in the Alzheimer’s Disease Neuroimaging Initiative data
+                                                 yields covariate-adjusted percentile bands with uncertainty, elucidating how diagnosis changes
+                                                 the distribution along the tract.
+
+                                          Keywords: Logistic Gaussian process, Posterior contraction, Single index model, Diffusion tensor
+                                          imaging
+
+                                             ∗
+                                              Equal contribution
+                                             †
+                                              Data used in preparation of this article were obtained from the Alzheimer’s Disease Neuroimaging Initiative (ADNI)
+                                          database (https://adni.loni.usc.edu/). The authors acknowledge funding support from grants R21DE031879 and
+                                          R01DE031134 from the United States National Institutes of Health.
+                                          Correspondence E-mail: dbandyop@vcu.edu
+
+
+                                                                                                    1
+1     Introduction
+
+In diverse fields such as biology (Beaumont, Zhang, and Balding, 2002), cosmology (Rau et al.,
+
+2015), ecology (Wood, 2010), and economics (Kalda and Siddiqui, 2013), there is a pressing need for
+
+modeling the distribution of a dependent variable given the covariates, rather than merely modeling
+
+conditional mean or variance. Such problems are referred to as conditional density estimation (CDE),
+
+where given a response-covariate pair (y, x) ∈ R × Rp , one aims to find the density function of y
+
+conditioned on x, denoted by f (y | x).
+
+    As a motivating example, we consider the data from the Alzheimer’s Disease Neuroimaging Initia-
+
+tive (ADNI) study (Jack et al., 2008). For each individual, a summary measure called the Fractional
+
+Anisotropy (FA) measuring the brain connectivity (Özarslan, Vemuri, and Mareci, 2005) is calcu-
+
+lated at varying locations across the skeleton of the midsagittal corpus callosum, along with different
+
+features including age, sex, and handedness. As demonstrated in Figures 1a and 1b, the FA mea-
+
+surements vary not only with respect to individuals, but also according to measurement locations.
+
+Based on the FA measurements, clinically relevant questions include where along the corpus callosum
+
+an individual’s FA values fall outside a covariate-adjusted reference percentile band, and how exten-
+
+sive these departures are. Therefore, our main interest is to model an individual’s FA measurement
+
+through the conditional density f (y | x, s) of the FA value y given the covariates x and the location
+
+s along the tract. The fitted density should support uncertainty quantification for clinically rele-
+
+vant summaries, such as covariate-adjusted percentile curves, and should also indicate how multiple
+
+covariates and location alter the FA distribution.
+
+    Quantile regression targets such percentile bands directly, and Zhang et al. (2022) fit the quantiles
+
+of FA along the same corpus callosum skeleton in ADNI (see also Reich, Fuentes, and Dunson, 2011).
+
+Each quantile is then linear in the covariates, and other distributional properties such as density,
+
+modes, and tail probabilities must be derived from the fitted quantile curves. To address this, one
+
+
+
+                                                     2
+                                                                      0.8
+                  0.8
+
+       response
+
+
+
+
+                                                           response
+                  0.6                                                 0.6
+
+
+
+
+                  0.4                                                 0.4
+
+
+
+
+                  0.2
+                                                                      0.2
+                        location                                            individual
+
+                        (a)                                                 (b)
+
+Figure 1: Exploratory analysis of the ADNI data. The left panel (Figure 1a) depicts the boxplots of
+the responses over 83 different locations, while the right panel (Figure 1b) plots the FA responses for
+213 individuals from 5 different locations (marked by varying colors).
+
+
+possible approach is parametric distributional regression (Rigby and Stasinopoulos, 2005; Klein et al.,
+
+2015). However, as it fixes a distributional family, the shape of the density including its number of
+
+modes is limited by that family, which might inhibit flexible density modeling.
+
+   CDE addresses this problem by nonparametrically modeling the density function so that the
+
+relevant properties such as tail probabilities and modes can be obtained directly from the density
+
+estimate. CDE has a well-established frequentist literature, including kernel (Chen, 2017) and local
+
+polynomial (Fan, Yao, and Tong, 1996) methods, alongside a growing body of Bayesian approaches
+
+(McDonald and Campbell, 2021). One Bayesian approach models the joint density of (y, x) and
+
+obtains the conditional density from it. This approach requires modeling the covariate distribution,
+
+including the four binary covariates in our application (sex, handedness, AD status, and MCI status).
+
+Moreover, when several covariates are included, clustering may be driven primarily by x rather than
+
+by y (Wade et al., 2014). The other route models f (y | x) directly, mostly as a mixture, whose
+
+weights or atoms depend on the covariates (Dunson, Pillai, and Park, 2007; Griffin and Steel, 2006;
+
+Dunson and Park, 2008), with spatial versions (Gelfand, Kottas, and MacEachern, 2005; Reich and
+
+Fuentes, 2007) and, for responses on [0, 1], dependent Bernstein polynomial priors (Petrone, 1999;
+
+Barrientos, Jara, and Quintana, 2017). Mixtures are designed for heterogeneity that arises from
+
+latent subpopulations. In the FA data, the main sources of heterogeneity are observed covariates
+
+
+
+                                                  3
+and the density changes gradually along the tract (Figure 1a). In a mixture, such a change is spread
+
+over the weights and atoms, so that the effect of a single covariate on it does not correspond to a
+
+parameter of the model.
+
+   For this purpose, the logistic Gaussian process (LGP; Leonard, 1978; Lenk, 1988) has been widely
+
+studied. It writes the density as exp {Z(y)} divided by its integral over the response space, where
+
+Z is modeled as a Gaussian process (GP). Since its exponential integration does not have a closed
+
+form, existing LGP methods largely fall under two classes. The first discretizes the GP and computes
+
+the integral numerically. It tracks the process at a finite set of nodes (Tokdar, 2007; Tokdar, Zhu,
+
+and Ghosh, 2010), bins the data with a Laplace approximation (Riihimäki and Vehtari, 2014; Payne
+
+et al., 2020), or represents the GP by random Fourier features (Gautier and Ginsbourger, 2026) or by
+
+piecewise multilinear finite elements on a uniform grid (Hegland, 2007; Griebel and Hegland, 2010).
+
+For example, Jacobs (2014) discretizes an LGP on a Riemannian manifold. The second class avoids
+
+the normalizing constant. Adams, Murray, and MacKay (2009a) pass the GP through a bounded link
+
+and treat the rejected proposals of a rejection sampler as latent variables, with extensions to Poisson
+
+process intensities (Adams, Murray, and MacKay, 2009b) and Pólya-Gamma augmentation (Donner
+
+and Opper, 2018; Wang, 2024). Others replace the likelihood by a score matching loss (Chen et al.,
+
+2026; Paisley, Zhang, and Barr, 2025).
+
+   Such LGP methods, however, face two limitations in our modeling context. The first class com-
+
+putes the integral numerically even after discretizing the GP, so the resulting likelihood is an approx-
+
+imation. The second class changes the link and adds latent points whose number grows with n, or
+
+replaces the likelihood. In each case, moments and quantiles of the fitted density need numerical inte-
+
+gration. Prediction-wise, for estimating a conditional density given a p-dimensional covariate vector
+
+x, the minimax rate for an α-smooth conditional density is n−α/(2α+p+1) , which deteriorates quickly
+
+as p grows (Tsybakov, 2009). Tokdar, Zhu, and Ghosh (2010) reduce dimensionality by projecting
+
+x onto a low-dimensional subspace, yielding faster posterior contraction when the true conditional
+
+
+
+                                                   4
+density depends on x only through such a (low-rank) projection (Tokdar, 2011), while Odin, Bachoc,
+
+and Lagnoux (2026) extend such rates for regression and density estimation to dimensions that grow
+
+with n. Such projection LGP methods, however, still approximate the normalizing constant.
+
+   In this paper, we propose the exact likelihood finite-rank LGP (ExFR-LGP), a finite-rank LGP
+
+model whose likelihood is exact. We model the conditional density using two bivariate functions:
+
+g1 captures covariate effects through a linear index with location-dependent coefficients, while g2
+
+captures additional variation across locations:
+
+
+                                           exp {g1 (y, xT β(s)) + g2 (y, s)}
+                          f (y | x, s) = R                                       ,                 (1)
+                                         Y
+                                            exp {g1 (t, xT β(s)) + g2 (t, s)} dt
+
+
+where g1 and g2 are assigned bivariate GP priors, and β(s) is a p-dimensional vector of coefficients
+
+varying with location s, with Y = [0, 1] in our setting. Similar to single index models (Li, 1991)
+
+and generalized additive models (Hastie and Tibshirani, 1986), each component is easy to read. We
+
+represent g1 and g2 by linear interpolation of their values on a regular grid (Maatouk and Bay, 2017),
+
+the tensor-product finite elements of Griebel and Hegland (2010), which here define the prior rather
+
+than approximate the posterior mode. The interpolated process is a finite-rank approximation of
+
+the parent GP; so the model is a finite-rank LGP, and for fixed (x, s) the exponent is piecewise
+
+linear in y. Hence, the normalizing constant, the mean and the quantiles are available in closed form
+
+(Supplement A.1, A.2 and A.3), and the sampler targets the exact posterior under this prior. To our
+
+knowledge, this is the first finite-rank LGP model for conditional density estimation with a closed-
+
+form likelihood, requiring neither response binning nor numerical quadrature and avoiding the use of
+
+a surrogate loss. Since g1 and g2 are bivariate, each grid stays two dimensional for any p. When the
+
+true log density is the sum of two such bivariate functions, we show that the posterior contracts at
+
+the rate n−α/(2α+2) up to a log factor, which is the minimax rate for an α-smooth bivariate density
+
+and the rate of Tokdar (2011) under a rank one projection. Since the grid values have a Gaussian
+
+prior induced by the GP, we sample them by the elliptical slice sampler (ESS; Murray, Adams, and
+
+                                                    5
+MacKay, 2010), which requires no tuning parameters. Finally, we investigate the performance of
+
+ExFR-LGP in simulations and on the ADNI data.
+
+    The paper is organized as follows. Section 2 defines ExFR-LGP and its prior, discusses its identifi-
+
+ability and alternative models. Section 3 presents the posterior contraction rate, and Section 4 derives
+
+the sampler. While Section 5 reports finite-sample characteristics of our proposal via simulation stud-
+
+ies, Section 6 illustrates ExFR-LGP via application to the ADNI data, presenting covariate-adjusted
+
+percentile curves along the corpus callosum with uncertainty. Finally, Section 7 concludes. The Sup-
+
+plement contains the closed form calculations, the proofs and the additional details of the numerical
+
+experiments.
+
+
+
+2     Methodology
+
+Let S = {s1 , . . . , sK } be K equidistant locations on [0, 1], satisfying sk = (k − 1)/(K − 1). For
+
+individual i = 1, . . . , n, we observe the covariate vector xi ∈ Rp , scaled so that maxi ∥xi ∥2 = 1, and
+
+the response yis ∈ [0, 1] at each location s ∈ S. Given xi , we assume that the responses at varying
+
+locations are independent, with
+                                                     ind
+                                         yis | xi , θ ∼ fθ (· | xi , s).                              (2)
+
+
+
+2.1    Model specification
+
+We construct the ExFR-LGP model by specifying the conditional log density as
+
+
+
+                           log fθ (y | x, s) = g1 (y, wx,s ) + g2 (y, s) − ψθ (x, s),                 (3)
+
+
+
+
+                                                       6
+                     R1
+where ψθ (x, s) = log 0 exp{g1 (t, wx,s ) + g2 (t, s)} dt is the normalizing constant. Here, wx,s denotes
+
+the rescaled index
+
+
+
+                           wx,s = c((xT β(s) + 1)/2),                   c(z) = min(max(z, 0), 1).                 (4)
+
+
+
+The function c clamps the range of wx,s to [0, 1] so that g1 is defined on [0, 1]2 . The component
+
+g1 captures the effect of x through the location varying index xT β(s), and g2 captures the density
+
+variation that does not depend on the covariates.
+
+   For g1 and g2 , we adopt the following basis representation:
+
+                               Nl
+                                                                                               2
+                               X        (l)   (l)          (l)                  (l)
+             gl (z1 , z2 ) =           ξij ϕi (z1 ) ϕj (z2 ),          ξ (l) = {ξij } ∈ R(Nl +1)    (l = 1, 2).   (5)
+                               i,j=0
+
+
+
+                                (l)
+The hat basis function ϕi (z) is defined as
+
+
+                                                     (l)
+                                                    ϕi (z) = max(1 − |Nl z − i|, 0).                              (6)
+
+
+                                                                                                                  (l)
+The resulting gl is a 2D piecewise linear function with nodal values satisfying gl (i/Nl , j/Nl ) = ξij .
+                                                                                      (l)
+Therefore, as suggested in Maatouk and Bay (2017), taking ξij as the nodal values of a continuous
+
+GP defined on [0, 1]2 leads to gl being a linear interpolation of a parent GP. This representation has
+
+been widely used for purposes such as computational scalability and shape constraints (Maatouk
+
+and Bay, 2017; Griebel and Hegland, 2010; Ray, Pati, and Bhattacharya, 2020; Kim, Bhattacharya,
+
+and Pati, 2025; Kim and Mak, 2026). We use a parent GP with mean zero and covariance kernel
+
+σl2 K (l) , with K (l) a correlation kernel, and this leads to ξ (l) ∼ N (0, σl2 Γ(l) ) with Γ(l) the correlation
+
+matrix of K (l) evaluated at knots, and we assign σl2 ∼ IG(aσ , bσ ). The resulting g1 and g2 are finite-
+
+rank approximations of the parent GPs. Together with the log-density formulation in (3), these
+
+representations define the ExFR-LGP model.
+
+
+
+                                                                   7
+   As an input of g1 , the rescaled index wx,s is obtained from index coefficients over the locations in
+
+S. For β = {β T (s1 ), . . . , β T (sK )}T ∈ RpK , we assign a Gaussian prior β ∼ N (0, Σ) with
+
+
+
+                                Σ = σβ2 Γβ ⊗ Ip ,     Γβ,kk′ = Kβ (sk , sk′ ),                      (7)
+
+
+
+where Kβ is a stationary positive definite kernel on [0, 1]. Namely, we assign independent and identical
+
+GP prior over the locations for each covariate.
+
+   Under such structure, the exponent of fθ is piecewise linear in y. Hence, its integral, the condi-
+
+tional mean and the quantiles are available in closed form (see Supplement A for details). Unlike
+
+the covariate dependent mixtures in Section 1, the smoothness of the log density in the response,
+
+the index and the location is stated directly as the GP priors on g1 and g2 , and each effect enters
+
+through its own component. Multimodal functions can be modeled as well, thanks to the piecewise
+
+linear structure in (5). It is worth noting that under this finite-rank GP prior on gl induced from
+
+piecewise linear interpolation, the likelihood and relevant quantities are calculated in a closed form,
+
+without any further numerical approximation.
+
+    In this model, the parameter θ itself is not identifiable. For instance, as g1 and g2 share the
+                            (1) (2)       (1)      (2)     
+basis functions, replacing ξij , ξij by ξij + ai , ξij − ai for any ai leaves fθ unchanged. Also,
+                                 (1)           (1)                   (1)           (1)  
+since c(1 − z) = 1 − c(z) and ϕj (1 − z) = ϕN1 −j (z), replacing β, ξij by − β, ξi,N1 −j leaves fθ
+
+unchanged. Therefore, we summarize the effect of the covariates through fθ (see Section 6).
+
+
+
+2.2    Related and alternative models
+
+Several existing models share parts of this construction. The index is a one-dimensional version of
+
+the subspace projection LGP (spLGP) of Tokdar, Zhu, and Ghosh (2010), which models f (y | x) as
+
+a function of (B T x, y) for a p × d matrix B and selects d from the data. Here, B is common to all x
+
+and the model has no location component. There is a literature utilizing finite representations of the
+
+
+
+                                                     8
+GP used in LGP, such as orthogonal series (Verdinelli and Wasserman, 1998). However, its integral
+
+does not enjoy a closed form.
+
+    The representation (5) is closest to that of Griebel and Hegland (2010), who compute the posterior
+
+mode of an LGP density by a Galerkin approximation in piecewise multilinear functions on a uniform
+
+grid, evaluate its integrals by Gauss quadrature and bound the discretization error. ExFR-LGP uses
+
+the same elements in two dimensions to define the prior, such that the likelihood is exact, enabling
+
+sampling of the whole posterior.
+
+    Gautier and Ginsbourger (2026) and Chen et al. (2026) allow the density to vary with location
+
+by taking the location as an input of the GP, and fit it by numerical integration and by a score
+
+matching loss, respectively. In Sections 5 and 6, we also compare ExFR-LGP with a full grid LGP,
+
+which keeps the finite-rank construction of ExFR-LGP but replaces g1 (y, wx,s ) + g2 (y, s) in (3) by a
+
+single function g(y, x, s) and represents it by linear interpolation on a tensor grid in (y, x, s), which
+
+is the discretization of Griebel and Hegland (2010) applied to (y, x, s). We also compare it with the
+
+spLGP of Tokdar, Zhu, and Ghosh (2010) and the logit stick-breaking mixture of Rigon and Durante
+
+(2021).
+
+
+
+3     Theoretical Properties
+
+Under the model (3) with the priors in Section 2, we derive the posterior contraction rate, which
+
+quantifies how fast the posterior concentrates around the true density. We build on the general results
+
+of Ghosal, Ghosh, and van der Vaart (2000); Ghosal and van der Vaart (2007a,b); van der Vaart and
+
+van Zanten (2008a).
+
+    We start with some notation. For α > 0, let α0 be the largest integer strictly smaller than α, and
+
+for k = (k1 , k2 ) let Dk = ∂ |k| /∂z1k1 ∂z2k2 with |k| = k1 + k2 . We denote by Cα (Z) the α-Hölder space on
+
+a closed rectangle Z ⊂ R2 , the set of functions g : Z → R whose partial derivatives Dk g with |k| ≤ α0
+
+exist and are bounded, and whose derivatives of order α0 satisfy |Dk g(z) − Dk g(z ′ )| ≤ L∥z − z ′ ∥α−α
+                                                                                                     2
+                                                                                                        0
+
+
+
+
+                                                      9
+for some L > 0 and all z, z ′ ∈ Z, and write Cα [0, 1]2 for Z = [0, 1]2 . Define the parameter space
+     n                                                         o
+                                                     2
+Θ = θ = (ξ (1) , ξ (2) , β) : ξ (1) , ξ (2) ∈ R(N +1) , β ∈ RpK and let F = {fθ : θ ∈ Θ} be the collection of
+
+conditional densities fθ (· | x, s) (∥x∥2 ≤ 1, s ∈ S) in (3). A prior on Θ defined in Section 2 induces
+
+a prior on F, which we refer to as Π. We write ∥g∥∞ = sup(z1 ,z2 )∈[0,1]2 |g(z1 , z2 )| for g : [0, 1]2 → R
+
+and ∥v∥∞ = maxj |vj | for a vector v. Finally, let f0 (y | x, s) denote the true conditional density,
+
+and denote the data Dn = {(xi , yis ) : 1 ≤ i ≤ n, s ∈ S}. For z, z ′ ∈ [0, 1]d and r = ∥z − z ′ ∥2 , the
+
+RBF kernel with inverse length-scale κ > 0 is KκRBF (z, z ′ ) = exp(−κ2 r2 ), and the Matérn kernel with
+                                                                          √             √
+                                              M
+smoothness ν > 0 and length-scale ℓ > 0 is Kν,ℓ (z, z ′ ) = {21−ν /Γ(ν)}( 2ν r/ℓ)ν Bν ( 2ν r/ℓ), where
+
+Γ(·) is the gamma function and Bν is the modified Bessel function of the second kind.
+
+   We first define the Hellinger distance between two conditional densities f1 and f2 as:
+
+                                              Z p
+                                      1 X                        p             2
+                   d2h (f1 , f2 ) =               f1 (y | x, s) − f2 (y | x, s) dy dH0 (x),              (8)
+                                      K s∈S
+
+
+with H0 denoting true distribution of x. This is the Hellinger distance between the joint distributions
+
+of (y, x, s) when x ∼ H0 and s is uniform on S. Without locations, it is the distance used for
+
+conditional densities (Shen and Ghosal, 2016; Norets and Pati, 2017).
+
+   We then consider the posterior contraction rate with respect to Hellinger distance dh . If the
+
+following holds for some constant C > 0:
+
+
+
+                                lim Ef0 Π(fθ ∈ F : dh (fθ , f0 ) ≥ Cεn | Dn ) = 0,                       (9)
+                               n→∞
+
+
+
+
+εn is called a posterior contraction rate. This implies that as n increases, the posterior distribution
+
+of f is concentrated around a radius Cεn ball with respect to dh .
+
+   Posterior contraction rates are well developed for Bayesian density estimation (Ghosal, Ghosh, and
+
+van der Vaart, 2000; Shen and Wasserman, 2001; Shen, Tokdar, and Ghosal, 2013). For conditional
+
+densities, most results give consistency (Tokdar, Zhu, and Ghosh, 2010; Pati, Dunson, and Tokdar,
+
+
+                                                          10
+2013; Norets and Pelenis, 2014). Rates are given by Shen and Ghosal (2016) and Norets and Pati
+
+(2017), whose exponents depend on the number of relevant covariates, and by Jiang (2007) for
+
+generalized linear models. Rates under a single index are available for regression (Dhara et al., 2020;
+
+Roy, Ghosal, and Choudhury, 2020), and Tokdar (2011) gives the rate n−α/(2α+d0 +1) for spLGP under
+
+a rank d0 projection with α > 1, for a squared exponential GP rather than the node approximation
+
+used in computation. Odin, Bachoc, and Lagnoux (2026) let the dimensions grow with n for regression
+
+and density estimation.
+
+   In this section, we assume that the observations {xi , (yis )s∈S }, i = 1, . . . , n are obtained as
+
+follows. First, {xi } are independently and identically sampled from the distribution H0 supported on
+
+{x : ∥x∥2 ≤ 1}. Given each xi , (yis )s∈S are independently drawn from the density f0 (· | xi , s). The
+
+numbers p and K are fixed. Assume that the true density function is represented as f0 (y | x, s) =
+             R
+Υ0 (y, x, s)/ Y Υ0 (y, x, s)dy with some Υ0 . Then the following holds.
+
+                                                    (0)               (0)              (0)        (0)
+Theorem 3.1. Suppose that log Υ0 (y, x, s) = g1 (y, xT β (0) (s)) + g2 (y, s), where g1      and g2     are
+
+α-Hölder for some α > 0. Assume that K (l) = KκRBF
+                                                 l
+                                                    with σl2 fixed (l = 1, 2) and N1 = N2 = N ≍ n,
+
+and that κ1 , κ2 are i.i.d. with a density πκ on [1, ∞) satisfying
+
+
+
+                     C1 κpκ exp(−D1 κ2 log4 κ) ≤ πκ (κ) ≤ C2 κpκ exp(−D2 κ2 log4 κ)                     (10)
+
+
+
+for large κ with constants C1 , C2 , D1 , D2 > 0 and pκ ≥ 0. Then (9) holds for ExFR-LGP in (3) with
+
+
+                                                   α           2α
+                                         εn = n− 2α+2 (log n) α+1 .                                     (11)
+
+
+
+Proof. Refer to Supplement B for the proof of the theorem.
+
+   Since N and πκ do not depend on the unknown smoothness α, the posterior contraction rate in
+
+Theorem 3.1 is an adaptive result. The rate n−α/(2α+2) given in Theorem 3.1 is the minimax rate
+
+for an α-smooth bivariate function, up to a logarithmic factor (Tsybakov, 2009). The proof reduces
+
+                                                    11
+the problem to the bivariate functions g1 and g2 and applies the results for GPs with RBF kernels
+
+(van der Vaart and van Zanten, 2008a, 2009). Corollary B.6 in Supplement B.7 shows that the
+
+same rate holds when p grows with n, as long as pK log n = o(nε2n ) with εn given in (11), when the
+
+covariates and the true index are bounded.
+
+
+
+4     Posterior computation
+
+Next, we present a posterior computation framework for the model (3). For modeling flexibility,
+
+we first introduce an extension of ExFR-LGP that models potential deviations from (3). We then
+
+outline a Gibbs sampler for both models, updating the parameters with a Gaussian prior by ESS.
+
+
+
+4.1     Extended Exact Likelihood Finite-Rank LGP
+
+To model f that deviates from the form (3), we consider the extended exact likelihood finite-rank
+
+LGP (Ex2FR-LGP),
+
+
+
+                        log fθ (y | x, s) = g1 (y, wx,s ) + g2 (y, s) + δ(y, x, s) − ψθ (x, s),                   (12)
+
+
+
+where δ models this deviation and ψθ is the log-normalizing constant of the new exponent. Since δ
+
+depends on x directly rather than through the index, it can capture departures from both the single
+                                                                                    PNδ     δ                       δ
+index and the additive form of (3). In our implementation, δ(y, x, s) =                j=0 ϕj (y) hj (x, s), where ϕj
+
+
+is the hat basis (6) with Nδ in place of Nl . The functions h0 , . . . , hNδ are assigned a zero mean GP
+
+prior with cov{hj (x, s), hj ′ (x′ , s′ )} = σδ2 Ky (j/Nδ , j ′ /Nδ ) Kx (x, x′ ) Ks (s, s′ ), where Ky , Kx and Ks are
+
+Matérn correlation kernels, and σδ2 ∼ IG(aδ , bδ ). We set (aδ , bδ ) to keep σδ2 and the discrepancy δ
+
+small, unless it is strongly suggested by the data. The same priors from Section 2.1 are adopted
+
+on g1 , g2 and β. With δ ≡ 0, this reduces to ExFR-LGP. The exponent in (12) remains piecewise
+
+linear in y, so the closed forms of the quantities such as integration, quantiles and moments given in
+
+
+                                                          12
+Supplement A can be calculated in a similar manner.
+
+   We then present a posterior sampler for Ex2FR-LGP. Such a sampler can naturally be used for
+
+ExFR-LGP by simply ignoring the sampling steps involving δ.
+
+
+
+4.2    Gibbs sampler
+
+                                                                                                (l)
+We use the same grid for g1 and g2 , N1 = N2 = N , and write ϕi = ϕi . For the GP kernels K (l)
+
+of gl , from which the priors on ξ (1) and ξ (2) are constructed, we use Matérn kernels Kν,ℓ
+                                                                                          M
+                                                                                              defined
+
+in Section 3, since the covariance matrix of the RBF kernel in Theorem 3.1 is nearly singular on a
+
+fine grid (Schaback, 1995; Wendland, 2004). We also fix N for computational convenience. Here,
+
+we fix the smoothness and the length-scale of the Matérn kernels at the values given in Section 5.
+
+Fixing the smoothness is common practice, with standard choices ν = 3/2 and 5/2. Larger values
+
+are hard to distinguish from one another with finite noisy data (Rasmussen and Williams, 2006).
+
+The length-scale is set so that the prior correlation between the two farthest grid points of gl is
+
+about 0.001, which gives a weakly informative prior. Under a Matérn kernel, the variance σ 2 and
+
+the length-scale cannot be consistently estimated separately, and predictions depend mainly on their
+
+ratio σ 2 /ℓ2ν (Zhang, 2004), so we fix ℓ and learn σl2 . Since only β(s)/∥β(s)∥2 enters the likelihood as
+
+described below, σβ2 has no effect and we set it to one.
+
+   Therefore, the model parameters to sample are θ = (ξ (1) , ξ (2) , β, σ12 , σ22 ), and the Gibbs sampler
+
+alternates between β, (ξ (1) , ξ (2) ) and (σ12 , σ22 ). For each block, θ− denotes the other parameters at
+
+their current values. Under (3), the log-likelihood is
+
+                      n
+                        " N                                                N
+                                                                            X                                            #
+                                          (1)                                        (2)
+                     XX    X
+        log L(θ) =                       ξjk ϕj (yis )ϕk (wxi ,s )     +            ξjk ϕj (yis ) ϕk (s)       − ψθ (xi , s) .   (13)
+                     s∈S i=1     j,k=0                                      j,k=0
+
+
+
+Since ξ (1) and ξ (2) are independent with Gaussian priors, their conditional posterior is
+
+
+
+                     π(ξ (1) , ξ (2) | θ− , Dn ) ∝ N (ξ (1) ; 0, σ12 Γ(1) ) N (ξ (2) ; 0, σ22 Γ(2) ) L(θ),                       (14)
+
+
+                                                              13
+a Gaussian prior times a likelihood, so we update (ξ (1) , ξ (2) ) jointly by one ESS step (Murray, Adams,
+
+and MacKay, 2010). While separate update of ξ (1) and ξ (2) in a Gibbs sampler is also valid, we
+
+sample them jointly as g1 and g2 are correlated a posteriori since they share the response y. Likewise,
+
+π(β | θ− , Dn ) ∝ N (β; 0, Σ) L(θ), and β is also updated by ESS. The inverse gamma prior of σl2 is
+
+conjugate,
+
+
+
+               σl2 | θ− , Dn ∼ IG aσ + (N + 1)2 /2, bσ + ξ (l)T (Γ(l) )−1 ξ (l) /2
+                                 
+                                                                                     (l = 1, 2),      (15)
+
+
+
+so σl2 is drawn after each ESS step of (ξ (1) , ξ (2) ).
+
+   The scales of β(s) and g1 are not separately identifiable, since a rescaling of β(s) can be offset
+
+by rescaling the second argument of g1 . To improve identifiability, we apply to the sampled β(s)
+
+an on-the-fly normalization to unit L2 norm, widely used in spatial statistics (Rue and Held, 2005;
+
+Mak, Bingham, and Lu, 2016). Namely, we obtain the posterior sample of β from ESS updates as an
+
+unconstrained vector, and use β(s)/∥β(s)∥2 in the likelihood and in all summaries. Since ∥x∥2 ≤ 1,
+
+the index wx,s then always lies in [0, 1] without clamping, so the grid of g1 covers every value of the
+
+index.
+
+   Since ν and ℓ are fixed, the Cholesky factors of Γ(1) , Γ(2) and Σ are computed once and only
+
+rescaled by σl , after which each prior draw of ξ (1) or ξ (2) and each draw from (15) costs O(M 2 ) with
+
+M = (N + 1)2 . Each ESS step also evaluates (13), usually several times. For each (i, s), at most
+
+two of the ϕk (wxi ,s ) are nonzero; so, with ψθ in closed form (Supplement A.1), one evaluation costs
+
+O{nK(N + p)}. By the Kronecker structure of Σ, a prior draw of β costs O(pK 2 ). Since the grids
+
+of g1 and g2 do not depend on p, the covariates enter only through the index and β, such that the
+
+cost per iteration grows linearly in p rather than exponentially as for a grid over the covariates.
+
+   For Ex2FR-LGP, the likelihood depends on hj only at the observed pairs (xi , s). So, we sample
+
+the latent values H = {hj (xi , s)} ∈ R(Nδ +1)×n×K , with vec(H) ∼ N (0, σδ2 Γs ⊗ Γx ⊗ Γy ), where Γy ,
+
+Γx and Γs are the correlation matrices of Ky , Kx and Ks over the knots j/Nδ , the covariate vectors
+
+                                                           14
+ Algorithm 1: Sampling from the posterior of θ
+  Input: data Dn , number of samples Titer , initial value θ0 and model flag ex2.flg, with
+   H = 0 in θ0
+  for t = 1, . . . , Titer do
+     Update βt from π(β | θ− , Dn ) by ESS, using βt (s)/∥βt (s)∥2 in wx,s ;
+                    (1) (2)
+     Update (ξt , ξt ) from π(ξ (1) , ξ (2) | θ− , Dn ) by one ESS step;
+               2
+     Draw σl,t     from π(σl2 | θ− , Dn ) in (15) (l = 1, 2);
+     if ex2.flg = true then
+         Update Ht from π(H | θ− , Dn ) by one ESS step;
+                     2
+         Draw σδ,t       from π(σδ2 | θ− , Dn ) in (16);
+     end
+  end
+                       (1) (2)      2      2                 2
+  Result: θt = (ξt , ξt , βt , σ1,t    , σ2,t ), with (Ht , σδ,t ) added for Ex2FR-LGP, t = 1, . . . , Titer .
+
+                                                                    PNδ                 δ
+x1 , . . . , xn and the locations in S. Each term of (13) gains        j=0 hj (xi , s) ϕj (yis ), and ψθ is computed
+
+
+from the exponent in (12). Since H has a Gaussian prior, it is updated by one ESS step after
+
+(ξ (1) , ξ (2) ), and the inverse gamma prior of σδ2 is conjugate,
+
+
+
+           σδ2 | θ− , Dn ∼ IG aδ + (Nδ + 1)nK/2, bδ + vec(H)T (Γs ⊗ Γx ⊗ Γy )−1 vec(H)/2 .
+                             
+                                                                                                                 (16)
+
+
+
+By the Kronecker structure, only the Cholesky factors of Γy , Γx and Γs are needed, and each prior
+
+draw of H and the quadratic form in (16) cost O{(Nδ + 1)nK(Nδ + n + K)}. At a new covariate
+
+vector x, hj (x, s) is drawn from its Gaussian conditional distribution given H. Algorithm 1 outlines
+
+the Gibbs sampler, where ex2.flg indicates whether Ex2FR-LGP is used instead of ExFR-LGP.
+
+
+
+5     Simulation studies
+
+We now investigate the finite-sample performance of ExFR-LGP in numerical experiments, using
+
+synthetic data. We fix p = 5 and take β1 (s) = s2 + 1, β2 (s) = (1 − s)2 , β3 (s) = 4s(1 − s), β4 (s) =
+
+2(s − 0.75)2 − 1, β5 (s) = 1.5 + 4 sin(s − 0.5), where s denotes the normalized location on [0, 1], and
+
+rescale β(s) to unit norm at each location. Each entry of the design matrix X is generated from
+
+Unif(−5, 5), centered columnwise, and normalized by maxi ∥xi ∥2 . Since ∥β(s)∥2 = 1 and ∥x∥2 ≤ 1,
+
+                                                        15
+wx,s = {xT β(s) + 1}/2 lies in [0, 1]. Given (x, s), the response is generated from one of the following
+
+two densities.
+
+   • Case 1 (unimodal)
+
+                                     (y | x, s) ∼ Beta[exp(2wx,s + 1), (18 − 8s)].                       (17)
+
+
+   • Case 2 (bimodal)
+
+                       
+                                                             
+                       Beta 10 exp {0.5 (k/K − 1/2)} , 4 k 3/4 with probability 1/[1 + exp {xT β(s)}]
+                       
+                       
+        (y | x, s) ∼
+                                                        
+                       Beta 32 sin(wx,s ), 8(k/K + 1)1/2
+                       
+                                                                  with probability 1/[1 + exp {−xT β(s)}]
+                                                                                                         (18)
+
+        where k is the index of the location s = sk .
+
+   The log density in Case 1 is a function of (y, wx,s ) plus a function of (y, s), so it has the form of
+
+(3). Case 2 is a mixture of two Beta densities whose weights depend on xT β(s), so the number and
+
+the positions of the modes change with (x, s). It does not have the form of (3), and a single Beta
+
+density cannot capture it.
+
+   For each n ∈ {50, 125, 250} and K ∈ {5, 10, 20, 30}, we generate 50 datasets. We randomly select
+
+80% of the individuals to train the model and keep the remaining n2 individuals, xi,test (i = 1, . . . , n2 ),
+
+to assess the fit. Each fθt integrates to one since its normalizing constant is exact (Supplement A.1).
+
+We take the pointwise median of fθt (· | x, s) over the retained states θt , normalized to integrate to
+
+one, as fb(· | x, s), and the pointwise (2.5%, 97.5%) quantiles give a 95% credible band for f (· | x, s).
+
+   The error of fb is the squared Hellinger distance (8) to the true density f0 , with H0 replaced by
+
+the empirical distribution of the xi,test and the integral over y computed on an equispaced grid of
+
+104 + 1 points. For illustration, we also generate one dataset with n = 200 and K = 20 from each
+
+case.
+
+   We compare ExFR-LGP with three methods: the full grid LGP of Section 2.2, the spLGP of
+
+Tokdar, Zhu, and Ghosh (2010) and the logit stick-breaking prior (LSBP) mixture of Rigon and
+
+                                                       16
+Durante (2021). For ExFR-LGP, we use N = 50 and Matérn kernels with smoothness ν = 5/2
+
+and length-scale ℓ = 0.292 for K (l) and Kβ , chosen following Section 4, with σβ2 = 1, aσ = 2 and
+
+bσ = 1. The full grid LGP uses the same kernel and variance prior, with a coarse grid of 3 points per
+
+covariate and 11 points for s, since the number of grid values grows exponentially in p. The spLGP
+
+uses a single index treating the location as one more covariate, with the same grid, kernel and priors
+
+as ExFR-LGP. LSBP is fitted to the logit of y as in Rigon and Durante (2021), with kernel means
+
+linear in (x, s) and mixing weights depending on x and a spline basis of s. All methods are run for
+
+2000 burn-in and 2000 posterior states, and Supplement C.1 gives the implementation details.
+
+   In Figure 2, we overlay the estimated densities of the four methods with the true density for
+
+different individuals at the same locations of the illustrative datasets. In Case 1, ExFR-LGP captures
+
+the truth, and its 95% credible bands cover it. In Case 2, which is misspecified, ExFR-LGP still
+
+recovers both the unimodal and the bimodal shapes, while the full grid LGP shows a single broad
+
+mode in all three panels. In panel (f), the spLGP, LSBP and the full grid LGP depart from the
+
+truth, while the band of ExFR-LGP covers it.
+
+   Figure 3 shows the error over the 50 replications against n on a log scale. For fixed K, the error of
+
+ExFR-LGP drops as n increases in both cases, in line with Theorem 3.1, and in Case 1 it also drops
+
+as K increases, since a larger K gives more responses to estimate g1 and g2 , which are shared by all
+
+locations. The full grid LGP has a larger error in all replications. The spLGP has a larger error in
+
+almost all replications, and its error decreases slowly in n, since its single index cannot let the effect
+
+of x change with s. LSBP has a larger error than ExFR-LGP in Case 1 and a similar error in Case
+
+2, where the truth is itself a mixture. In both cases, the 95% credible band of ExFR-LGP covers
+
+the truth more often than those of the other methods (Supplement C.2). When the responses of one
+
+individual are correlated along the tract, the predictive intervals of ExFR-LGP keep their nominal
+
+coverage, while the error grows and the credible band becomes narrower than the actual uncertainty
+
+(Supplement C.3).
+
+
+
+                                                   17
+                 (a)                                 (b)                                 (c)
+
+
+
+
+                 (d)                                 (e)                                 (f)
+
+
+Figure 2: The black dashed line represents the true density, and the blue line is the ExFR-LGP
+estimate with 95% credible band in shaded blue for different individuals at the same location. Upper
+panels [(a), (b), (c)] and lower panels [(d), (e), (f)] correspond to densities in (17) and (18) respectively.
+The green, yellow and orange lines are the posterior medians of the spLGP, LSBP and the full grid
+LGP, respectively. The individuals are the test points at the 10th, 50th and 90th percentiles of
+xT β(s).
+
+
+
+6     Application: Diffusion Tensor Imaging
+
+We applied ExFR-LGP in (3) to the ADNI data described in Section 1, obtained from the ADNI
+
+database (https://adni.loni.usc.edu/). The dataset comes from processed diffusion-weighted
+
+imaging (DWI) data (Bammer, 2003). The FA maps were processed with the TBSS pipeline (Smith
+
+et al., 2006) as in Luo, Zhu, and Zhu (2016) and Zhang et al. (2022), and each individual’s FA
+
+was measured at 83 grid points along the skeleton of the midsagittal corpus callosum. The FA
+
+measurement is a fraction between 0 and 1, where high FA values indicate healthy tissue and lower
+
+values typically indicate microstructural damage within coherent fiber bundles such as the corpus
+
+callosum (Basser, 1995; Sexton et al., 2011).
+
+    We are interested in estimating the density of FA at a specific location given the covariates x.
+
+Here x consists of seven covariates, four binary and three continuous. The binary covariates are sex
+
+(1 if male), handedness (1 if left-handed), AD (1 if diagnosed with Alzheimer’s disease) and MCI (1 if
+
+                                                     18
+Figure 3: Median (point) and interquartile range (bar) over 50 replications of the squared Hellinger
+distance between the true and the estimated density, averaged over the test individuals and the K
+locations, against n, with both axes on a log scale. The upper row is Case 1 (17) and the lower row
+is Case 2 (18), and the columns are the values of K. Blue circles are ExFR-LGP, green squares the
+spLGP, yellow diamonds LSBP and orange triangles the full grid LGP.
+
+
+diagnosed with mild cognitive impairment). Of the 213 individuals, 42 have AD, 118 have MCI and
+
+the other 53 are cognitively normal (CN). The continuous covariates are age and education in years
+
+and the Mini-Mental State Exam (MMSE) score, where a higher score indicates better cognition. All
+
+covariates are standardized to have mean zero and variance one.
+
+   We also compare ExFR-LGP with two of its variants,
+
+
+
+                                log fθ (y | x, s) = g(y, wx,s ) − ψθ (x, s),                       (19)
+
+                                log fθ (y | x, s) = gs (y, wx,s ) − ψθ (x, s),                     (20)
+
+
+
+where g and each gs (s ∈ S) are represented as in (5). Model (19) drops g2 , so the location affects the
+
+density only through β(s). Model (20) fits a separate surface at each location. It contains ExFR-LGP
+
+as the special case gs (y, w) = g1 (y, w) + g2 (y, s), so it is an overparametrized version of ExFR-LGP,
+
+
+                                                     19
+with K(N + 1)2 grid values instead of 2(N + 1)2 , so its dimension grows linearly in K. It also shares
+
+no information across locations.
+
+   We compare ExFR-LGP with the alternative models above, Ex2FR-LGP of Section 4.1, the full
+
+grid LGP, the spLGP and LSBP of Section 5 by 5-fold cross-validation over individuals. The 213
+
+individuals are split at random into five folds, each model is fitted to four folds, and for each held-out
+                                                                                 −1
+                                                                                        PTiter Q
+individual i we compute the log predictive density of all their responses, log{Titer      t=1      s∈S fθt (yis |
+
+
+xi , s)}, where θt (t = 1, . . . , Titer ) are the posterior samples retained after burn-in. Its sum over all
+
+held-out individuals is larger for a model that predicts new individuals better. The individual is the
+
+unit here because the responses of one individual along the tract are dependent. We use the same
+
+N , kernels and priors as in Section 5, with 2 grid points per covariate for the full grid LGP, and for
+
+Ex2FR-LGP we use Nδ = 5, (aδ , bδ ) = (2, 0.1) and the same Matérn kernel for Γy , Γx and Γs , with
+
+the Euclidean distance between covariate vectors for Γx . Every model is run for 22000 iterations, the
+
+first 20000 as burn-in, and the log predictive density uses the last 2000. For Ex2FR-LGP, H is fixed
+
+at zero in the first half of the burn-in as a warm-up.
+
+Table 1: Five-fold cross-validation over the 213 individuals of the ADNI data. Log predictive density
+of all responses of each held-out individual, summed over individuals (larger is better, bold marks
+the largest).
+
+                                    Model           Log predictive density
+                            ExFR-LGP (Eqn (3))             21451.6
+                           Ex2FR-LGP (Eqn (12))           21665.3
+                           Alternative 1 (Eqn (19))        18349.3
+                           Alternative 2 (Eqn (20))        21405.5
+                                Full grid LGP              16651.0
+                                    spLGP                  19797.9
+                                     LSBP                  21312.9
+
+
+   In Table 1, Ex2FR-LGP has the largest log predictive density, followed by ExFR-LGP. Model
+
+(20) comes close, although it uses K/2 times as many grid values, and LSBP follows. The spLGP,
+
+the simpler model (19) and the full grid LGP, whose covariate grid is inevitably coarse under p = 7,
+
+predict new individuals clearly worse. The central 80% and 95% posterior predictive intervals of
+
+
+                                                     20
+Figure 4: 10th and 90th percentiles of FA along the tract (blue lines, posterior median, with pointwise
+95% credible bands). Left, a CN individual and their own band. Right, an AD individual of the same
+sex and the closest age and a CN reference band with the same sex, age, handedness and education.
+Points are the observed FA, red when outside the band. The credible bands are computed under
+model (2).
+
+
+Ex2FR-LGP contain 79.5% and 94.5% of the held-out responses. Since Ex2FR-LGP fits the data
+
+best, we report its fit below. The posterior of σδ2 concentrates near zero, with median 0.0034, so the
+
+densities in the figures below are computed from g1 + g2 of the fit, with δ omitted.
+
+   We summarize the effect of diagnosis through fθ . The posterior median of the difference in the
+
+median of fθ (· | x, s) between an AD and a CN individual, holding all other covariates at their
+
+overall averages, is negative at every location, consistent with the known decline in FA associated
+
+with Alzheimer’s disease (Sexton et al., 2011). This difference remains negative at almost all locations
+
+across the five fits, each excluding one fifth of the individuals (Supplement C.4).
+
+   Figure 4 shows the posterior median of the 10th and 90th percentiles of fθ (· | x, s) along the
+
+tract, with the observed FA of two individuals. They are chosen to have the same sex and the closest
+
+age, while one is a CN and another is an AD individual. The band of the CN individual uses their
+
+own covariates. The band of the AD individual uses their own sex, age, handedness and education
+
+as a reference, with AD and MCI set to 0 and MMSE at the CN group mean. Such a band gives
+
+a covariate-adjusted reference against which the FA profile of a new individual can be compared.
+
+
+                                                  21
+Zhang et al. (2022) use p-value curves for a similar comparison. The FA of the AD individual falls
+
+below this reference band at locations 21 to 25 and stays in its lower part up to location 50. Its use
+
+as a diagnostic tool would need validation against clinical outcomes. The pointwise credible bands
+
+rely on the conditional independence assumption in (2) and may therefore understate uncertainty
+
+when within-individual responses are strongly correlated along the tract (Supplement C.3).
+
+
+
+7     Conclusions
+
+We proposed ExFR-LGP, a finite-rank LGP model for conditional densities that change with covari-
+
+ates and location. The normalizing constant of an LGP is the integral of an exponentiated GP, which
+
+has no closed form. We approximate the GP by linear interpolation on a regular grid, resulting in a
+
+log density that is piecewise linear in the response, and the likelihood, the mean and the quantiles
+
+available in closed form. We reduce dimensionality by expressing the log density, up to a normal-
+
+izing term, as the sum of two bivariate functions: one of the response and a covariate index with
+
+location-dependent coefficients, following a single-index formulation, and the other of the response
+
+and location. The posterior contracts at the minimax rate of a bivariate α-smooth function up to a
+
+logarithmic factor when the true log density is the sum of two such bivariate functions. Simulation
+
+studies revealed that ExFR-LGP was more accurate than a full grid LGP and spLGP with the same
+
+number of MCMC iterations, and comparable to or more accurate than LSBP. Application to the
+
+ADNI data generated covariate-adjusted percentile bands of FA along the corpus callosum.
+
+    The current model has several limitations. Conditional independence across locations may un-
+
+derstate posterior uncertainty when within-individual responses are strongly correlated along the
+
+tract. The single-index structure also restricts covariate effects at each location to one linear com-
+
+bination, while the posterior contraction result requires the true log density, up to normalization,
+
+to admit the specified additive bivariate representation. Future work will investigate multiple-index
+
+extensions (Xia et al., 2002) to accommodate richer covariate effects, and Gaussian copula models
+
+                                                 22
+to capture within-individual dependence separately from the covariate-adjusted FA distributions at
+
+individual locations (Hoff, 2007), retaining their closed-form likelihood contributions. Additional
+
+directions include establishing posterior contraction under dependent responses, developing simulta-
+
+neous reference bands for tract-level FA profiles, and quantifying uncertainty in summaries such as
+
+the proportion of locations at which an individual’s FA falls outside the reference band. The clinical
+
+utility of these summaries will require validation against clinical outcomes.
+
+
+
+Acknowledgement
+
+Data collection and sharing for this project was funded by the Alzheimer’s Disease Neuroimaging Ini-
+
+tiative (ADNI) (National Institutes of Health Grant U01 AG024904) and DOD ADNI (Department
+
+of Defense award number W81XWH-12-2-0012). ADNI is funded by the National Institute on Aging,
+
+the National Institute of Biomedical Imaging and Bioengineering, and through generous contribu-
+
+tions from the following: AbbVie, Alzheimer’s Association; Alzheimer’s Drug Discovery Foundation;
+
+Araclon Biotech; BioClinica, Inc.; Biogen; Bristol-Myers Squibb Company; CereSpir, Inc.; Cogstate;
+
+Eisai Inc.; Elan Pharmaceuticals, Inc.; Eli Lilly and Company; EuroImmun; F. Hoffmann-La Roche
+
+Ltd and its affiliated company Genentech, Inc.; Fujirebio; GE Healthcare; IXICO Ltd.; Janssen
+
+Alzheimer Immunotherapy Research & Development, LLC.; Johnson & Johnson Pharmaceutical
+
+Research & Development LLC.; Lumosity; Lundbeck; Merck & Co., Inc.; Meso Scale Diagnostics,
+
+LLC.; NeuroRx Research; Neurotrack Technologies; Novartis Pharmaceuticals Corporation; Pfizer
+
+Inc.; Piramal Imaging; Servier; Takeda Pharmaceutical Company; and Transition Therapeutics. The
+
+Canadian Institutes of Health Research is providing funds to support ADNI clinical sites in Canada.
+
+Private sector contributions are facilitated by the Foundation for the National Institutes of Health
+
+(www.fnih.org). The grantee organization is the Northern California Institute for Research and
+
+Education, and the study is coordinated by the Alzheimer’s Therapeutic Research Institute at the
+
+University of Southern California. ADNI data are disseminated by the Laboratory for Neuro Imaging
+
+                                                  23
+at the University of Southern California. The authors also acknowledge partial research support from
+
+grants R01DE031134 and R21DE031879 from the United States National Institutes of Health.
+
+
+
+
+References
+Adams, Ryan Prescott, Iain Murray, and David J. C. MacKay. 2009a. “The Gaussian process density
+ sampler.” In Advances in Neural Information Processing Systems, Vol. 21, 9–16.
+
+Adams, Ryan Prescott, Iain Murray, and David J. C. MacKay. 2009b. “Tractable nonparametric
+ Bayesian inference in Poisson processes with Gaussian process intensities.” In Proceedings of the
+ 26th International Conference on Machine Learning, 9–16.
+
+Adler, Robert J. 1990. An Introduction to Continuity, Extrema, and Related Topics for General
+ Gaussian Processes. Vol. 12 of Lecture Notes–Monograph Series. Hayward, CA: Institute of Math-
+ ematical Statistics.
+
+Bammer, Roland. 2003. “Basic principles of diffusion-weighted imaging.” European Journal of Radi-
+  ology 45 (3): 169–184.
+
+Barrientos, Andrés F., Alejandro Jara, and Fernando A. Quintana. 2017. “Fully nonparametric regres-
+  sion for bounded data using dependent Bernstein polynomials.” Journal of the American Statistical
+  Association 112 (518): 806–825.
+
+Basser, Peter J. 1995. “Inferring microstructural features and the physiological state of tissues from
+  diffusion-weighted images.” NMR in Biomedicine 8 (7): 333–344.
+
+Beaumont, Mark A., Wenyang Zhang, and David J. Balding. 2002. “Approximate Bayesian compu-
+  tation in population genetics.” Genetics 162 (4): 2025–2035.
+
+Chen, Yen-Chi. 2017. “A tutorial on kernel density estimation and recent advances.” Biostatistics &
+ Epidemiology 1 (1): 161–187.
+
+Chen, Zichuan, Lucas Kock, Jeong Eun Lee, and David J. Nott. 2026. “Logistic Gaussian process
+ density regression: a generalized Bayesian approach.” arXiv:2606.22915.
+
+Dhara, Kumaresh, Stuart Lipsitz, Debdeep Pati, and Debajyoti Sinha. 2020. “A new Bayesian single
+ index model with or without covariates missing at random.” Bayesian Analysis 15 (3): 759–780.
+
+Donner, Christian, and Manfred Opper. 2018. “Efficient Bayesian inference for a Gaussian process
+ density model.” In Proceedings of the 34th Conference on Uncertainty in Artificial Intelligence,
+ Monterey, CA. AUAI Press.
+
+Dunson, David B., and Ju-Hyun Park. 2008. “Kernel stick-breaking processes.” Biometrika 95 (2):
+ 307–323.
+
+Dunson, David B., Natesh Pillai, and Ju-Hyun Park. 2007. “Bayesian density regression.” Journal of
+ the Royal Statistical Society: Series B (Statistical Methodology) 69 (2): 163–183.
+
+
+
+                                                 24
+Fan, Jianqing, Qiwei Yao, and Howell Tong. 1996. “Estimation of conditional densities and sensitivity
+  measures in nonlinear dynamical systems.” Biometrika 83 (1): 189–206.
+
+Gautier, Athénaı̈s, and David Ginsbourger. 2026. “Continuous logistic Gaussian random measure
+ fields for spatial distributional modelling.” Annals of the Institute of Statistical Mathematics 1–39.
+
+Gelfand, Alan E., Athanasios Kottas, and Steven N. MacEachern. 2005. “Bayesian nonparametric
+ spatial modeling with Dirichlet process mixing.” Journal of the American Statistical Association
+ 100 (471): 1021–1035.
+
+Ghosal, Subhashis, Jayanta K. Ghosh, and Aad W. van der Vaart. 2000. “Convergence rates of
+ posterior distributions.” The Annals of Statistics 28 (2): 500–531.
+
+Ghosal, Subhashis, and Aad van der Vaart. 2007a. “Convergence rates of posterior distributions for
+ noniid observations.” The Annals of Statistics 35 (1): 192–223.
+
+Ghosal, Subhashis, and Aad van der Vaart. 2007b. “Posterior convergence rates of Dirichlet mixtures
+ at smooth densities.” The Annals of Statistics 35 (2): 697–723.
+
+Griebel, Michael, and Markus Hegland. 2010. “A finite element method for density estimation with
+  Gaussian process priors.” SIAM Journal on Numerical Analysis 47 (6): 4759–4792.
+
+Griffin, Jim E., and Mark F. J. Steel. 2006. “Order-based dependent Dirichlet processes.” Journal of
+  the American Statistical Association 101 (473): 179–194.
+
+Hastie, Trevor, and Robert Tibshirani. 1986. “Generalized additive models.” Statistical Science 1
+  (3): 297–310.
+
+Hegland, Markus. 2007. “Approximate maximum a posteriori with Gaussian process priors.” Con-
+  structive Approximation 26 (2): 205–224.
+
+Hoff, Peter D. 2007. “Extending the rank likelihood for semiparametric copula estimation.” The
+  Annals of Applied Statistics 1 (1): 265–283.
+
+Jack, Clifford R., Jr., Matt A. Bernstein, Nick C. Fox, Paul Thompson, Gene Alexander, Danielle
+  Harvey, Bret Borowski, et al. 2008. “The Alzheimer’s Disease Neuroimaging Initiative (ADNI):
+  MRI methods.” Journal of Magnetic Resonance Imaging 27 (4): 685–691.
+
+Jacobs, Justin Wayne. 2014. “Nonparametric density estimation on Riemannian manifolds.” PhD
+  diss., University of Maryland, Baltimore County.
+
+Jiang, Wenxin. 2007. “Bayesian variable selection for high dimensional generalized linear models:
+  convergence rates of the fitted densities.” The Annals of Statistics 35 (4): 1487–1511.
+
+Kalda, Ankit, and Sikandar Siddiqui. 2013. “Nonparametric conditional density estimation of short-
+ term interest rate movements: procedures, results and risk management implications.” Applied
+ Financial Economics 23 (8): 671–684.
+
+Kim, Jaehoan, Anirban Bhattacharya, and Debdeep Pati. 2025. “Adaptive resolution for finite-rank
+  Gaussian processes.” arXiv:2505.24066.
+
+Kim, Jaehoan, and Simon Mak. 2026. “Isotonic surrogate modeling for computer experiments with
+  many input variables.” arXiv:2609.35354.
+
+                                                  25
+Klein, Nadja, Thomas Kneib, Stefan Lang, and Alexander Sohn. 2015. “Bayesian structured additive
+  distributional regression with an application to regional income inequality in Germany.” The Annals
+  of Applied Statistics 9 (2): 1024–1052.
+
+Lenk, Peter J. 1988. “The logistic normal distribution for Bayesian, nonparametric, predictive den-
+  sities.” Journal of the American Statistical Association 83 (402): 509–516.
+
+Leonard, Tom. 1978. “Density estimation, stochastic processes and prior information.” Journal of
+  the Royal Statistical Society: Series B (Methodological) 40 (2): 113–132.
+
+Li, Ker-Chau. 1991. “Sliced inverse regression for dimension reduction.” Journal of the American
+  Statistical Association 86 (414): 316–327.
+
+Luo, Xinchao, Lixing Zhu, and Hongtu Zhu. 2016. “Single-index varying coefficient model for func-
+  tional responses.” Biometrics 72 (4): 1275–1284.
+
+Maatouk, Hassan, and Xavier Bay. 2017. “Gaussian process emulators for computer experiments with
+ inequality constraints.” Mathematical Geosciences 49 (5): 557–582.
+
+Mak, Simon, Derek Bingham, and Yi Lu. 2016. “A regional compound Poisson process for hurricane
+ and tropical storm damage.” Journal of the Royal Statistical Society: Series C (Applied Statistics)
+ 65 (5): 677–703.
+
+McDonald, Shaun, and David Campbell. 2021. “A review of uncertainty quantification for density
+ estimation.” Statistics Surveys 15: 1–71.
+
+Murray, Iain, Ryan Prescott Adams, and David J. C. MacKay. 2010. “Elliptical slice sampling.”
+ In Proceedings of the Thirteenth International Conference on Artificial Intelligence and Statistics,
+ Vol. 9 of Proceedings of Machine Learning Research, 541–548. PMLR.
+
+Norets, Andriy, and Debdeep Pati. 2017. “Adaptive Bayesian estimation of conditional densities.”
+  Econometric Theory 33 (4): 980–1012.
+
+Norets, Andriy, and Justinas Pelenis. 2014. “Posterior consistency in conditional density estimation
+  by covariate dependent mixtures.” Econometric Theory 30 (3): 606–646.
+
+Odin, Elie, François Bachoc, and Agnès Lagnoux. 2026. “Contraction rates and projection subspace
+ estimation with Gaussian process priors in high dimension.” Bernoulli 32 (2): 1645–1664.
+
+Özarslan, Evren, Baba C. Vemuri, and Thomas H. Mareci. 2005. “Generalized scalar measures for
+  diffusion MRI using trace, variance, and entropy.” Magnetic Resonance in Medicine 53 (4): 866–
+  876.
+
+Paisley, John, Wei Zhang, and Brian Barr. 2025. “Gaussian process tilted nonparametric density
+  estimation using Fisher divergence score matching.” In 2025 IEEE International Conference on
+  Big Data, 1162–1171.
+
+Pati, Debdeep, David B. Dunson, and Surya T. Tokdar. 2013. “Posterior consistency in conditional
+  distribution estimation.” Journal of Multivariate Analysis 116: 456–472.
+
+Payne, Richard D., Nilabja Guha, Yu Ding, and Bani K. Mallick. 2020. “A conditional density
+  estimation partition model using logistic Gaussian processes.” Biometrika 107 (1): 173–190.
+
+
+                                                 26
+Petrone, Sonia. 1999. “Random Bernstein polynomials.” Scandinavian Journal of Statistics 26 (3):
+  373–393.
+
+Rasmussen, Carl Edward, and Christopher K. I. Williams. 2006. Gaussian Processes for Machine
+  Learning. Cambridge, MA: MIT Press.
+
+Rau, Markus Michael, Stella Seitz, Fabrice Brimioulle, Eibe Frank, Oliver Friedrich, Daniel Gruen,
+  and Ben Hoyle. 2015. “Accurate photometric redshift probability density estimation – method
+  comparison and application.” Monthly Notices of the Royal Astronomical Society 452 (4): 3710–
+  3725.
+
+Ray, Pallavi, Debdeep Pati, and Anirban Bhattacharya. 2020. “Efficient Bayesian shape-restricted
+  function estimation with constrained Gaussian process priors.” Statistics and Computing 30 (4):
+  839–853.
+
+Reich, Brian J., and Montserrat Fuentes. 2007. “A multivariate semiparametric Bayesian spatial
+  modeling framework for hurricane surface wind fields.” The Annals of Applied Statistics 1 (1):
+  249–264.
+
+Reich, Brian J., Montserrat Fuentes, and David B. Dunson. 2011. “Bayesian spatial quantile regres-
+  sion.” Journal of the American Statistical Association 106 (493): 6–20.
+
+Rigby, Robert A., and D. Mikis Stasinopoulos. 2005. “Generalized additive models for location, scale
+  and shape.” Journal of the Royal Statistical Society: Series C (Applied Statistics) 54 (3): 507–554.
+
+Rigon, Tommaso, and Daniele Durante. 2021. “Tractable Bayesian density regression via logit stick-
+  breaking priors.” Journal of Statistical Planning and Inference 211: 131–142.
+
+Riihimäki, Jaakko, and Aki Vehtari. 2014. “Laplace approximation for logistic Gaussian process
+  density estimation and regression.” Bayesian Analysis 9 (2): 425–448.
+
+Roy, Arkaprava, Subhashis Ghosal, and Kingshuk Roy Choudhury. 2020. “High dimensional single-
+  index Bayesian modeling of brain atrophy.” Bayesian Analysis 15 (4): 1229–1249.
+
+Rue, Håvard, and Leonhard Held. 2005. Gaussian Markov Random Fields: Theory and Applica-
+ tions. Vol. 104 of Monographs on Statistics and Applied Probability. Boca Raton, FL: Chapman &
+ Hall/CRC.
+
+Schaback, Robert. 1995. “Error estimates and condition numbers for radial basis function interpola-
+  tion.” Advances in Computational Mathematics 3 (3): 251–264.
+
+Sexton, Claire E., Ukwuori G. Kalu, Nicola Filippini, Clare E. Mackay, and Klaus P. Ebmeier.
+  2011. “A meta-analysis of diffusion tensor imaging in mild cognitive impairment and Alzheimer’s
+  disease.” Neurobiology of Aging 32 (12): 2322.e5–2322.e18.
+
+Shen, Weining, and Subhashis Ghosal. 2016. “Adaptive Bayesian density regression for high-
+  dimensional data.” Bernoulli 22 (1): 396–420.
+
+Shen, Weining, Surya T. Tokdar, and Subhashis Ghosal. 2013. “Adaptive Bayesian multivariate
+  density estimation with Dirichlet mixtures.” Biometrika 100 (3): 623–640.
+
+Shen, Xiaotong, and Larry Wasserman. 2001. “Rates of convergence of posterior distributions.” The
+  Annals of Statistics 29 (3): 687–714.
+
+                                                 27
+Smith, Stephen M., Mark Jenkinson, Heidi Johansen-Berg, Daniel Rueckert, Thomas E. Nichols,
+  Clare E. Mackay, Kate E. Watkins, et al. 2006. “Tract-based spatial statistics: voxelwise analysis
+  of multi-subject diffusion data.” NeuroImage 31 (4): 1487–1505.
+Tokdar, Surya T. 2007. “Towards a faster implementation of density estimation with logistic Gaussian
+  process priors.” Journal of Computational and Graphical Statistics 16 (3): 633–655.
+Tokdar, Surya T. 2011. “Dimension adaptability of Gaussian process models with variable selection
+  and projection.” arXiv:1112.0716.
+Tokdar, Surya T., Yu M. Zhu, and Jayanta K. Ghosh. 2010. “Bayesian density regression with logistic
+  Gaussian process and subspace projection.” Bayesian Analysis 5 (2): 319–344.
+Tsybakov, Alexandre B. 2009. Introduction to Nonparametric Estimation. Springer Series in Statis-
+  tics. New York: Springer.
+van der Vaart, Aad W., and J. Harry van Zanten. 2008a. “Rates of contraction of posterior distribu-
+  tions based on Gaussian process priors.” The Annals of Statistics 36 (3): 1435–1463.
+van der Vaart, Aad W., and J. Harry van Zanten. 2008b. “Reproducing kernel Hilbert spaces of
+  Gaussian priors.” In Pushing the Limits of Contemporary Statistics: Contributions in Honor of
+  Jayanta K. Ghosh, edited by Bertrand Clarke and Subhashis Ghosal, Vol. 3 of IMS Collections,
+  200–222. Beachwood, OH: Institute of Mathematical Statistics.
+van der Vaart, Aad W., and J. Harry van Zanten. 2009. “Adaptive Bayesian estimation using a
+  Gaussian random field with inverse Gamma bandwidth.” The Annals of Statistics 37 (5B): 2655–
+  2675.
+Verdinelli, Isabella, and Larry Wasserman. 1998. “Bayesian goodness-of-fit testing using infinite-
+  dimensional exponential families.” The Annals of Statistics 26 (4): 1215–1241.
+Vershynin, Roman. 2026. High-Dimensional Probability: An Introduction with Applications in Data
+  Science. 2nd ed. Cambridge: Cambridge University Press.
+Wade, Sara, David B. Dunson, Sonia Petrone, and Lorenzo Trippa. 2014. “Improving prediction from
+ Dirichlet process mixtures via enrichment.” Journal of Machine Learning Research 15: 1041–1071.
+Wang, Haoxuan. 2024. “Nonparametric Bayesian density estimation with Gaussian processes.” Mas-
+ ter’s thesis, Duke University.
+Wendland, Holger. 2004. Scattered Data Approximation. Cambridge: Cambridge University Press.
+Wood, Simon N. 2010. “Statistical inference for noisy nonlinear ecological dynamic systems.” Nature
+ 466 (7310): 1102–1104.
+Xia, Yingcun, Howell Tong, W. K. Li, and Li-Xing Zhu. 2002. “An adaptive estimation of dimension
+  reduction space.” Journal of the Royal Statistical Society: Series B (Statistical Methodology) 64
+  (3): 363–410.
+Zhang, Hao. 2004. “Inconsistent estimation and asymptotically equal interpolations in model-based
+  geostatistics.” Journal of the American Statistical Association 99 (465): 250–261.
+Zhang, Zhengwu, Xiao Wang, Linglong Kong, and Hongtu Zhu. 2022. “High-dimensional spatial
+  quantile function-on-scalar regression.” Journal of the American Statistical Association 117 (539):
+  1563–1578.
+
+                                                 28
+                           Supplementary Materials
+   Supplement A gives the closed form calculations. Supplement B derives the detailed proof of
+
+Theorem 3.1. Supplement C presents the benchmark methods, the coverage of the credible band, a
+
+check of dependence across locations and the posterior contrast in the ADNI data.
+
+
+
+Supplement A: Closed form calculations
+
+We derive the normalizing constant, the mean and the quantiles of fθ (· | x, s) in (3). Fix (x, s), and
+
+let uj = j/N (j = 0, . . . , N ) be the knots and ∆N = 1/N . By (5), the exponent of fθ is
+
+                                           N
+                                           X                             N
+                                                                         X  (1)              (2)
+             g1 (y, wx,s ) + g2 (y, s) =         δi ϕi (y),         δi =    ξij ϕj (wx,s ) + ξij ϕj (s) ,   (S1)
+                                           i=0                            j=0
+
+
+
+which is piecewise linear in y with value δj at uj . On [uj , uj+1 ] it equals γj + λj y, with slope
+
+λj = (δj+1 − δj )/∆N and intercept γj = δj − λj uj (j = 0, . . . , N − 1). For Ex2FR-LGP in (12), the
+                 PNδ              δ
+exponent gains     k=0 hk (x, s) ϕk (y). This term is piecewise linear with knots k/Nδ , so the exponent
+
+
+is piecewise linear with knots at the union of {uj } and {k/Nδ }, and the calculations below hold with
+
+the uj replaced by the knots of this union and the δj by the values of the exponent there. If Nδ
+                                                                                                 δ
+                                                                                  P
+divides N , the union is {uj }, and every δi is replaced by δi +                    k hk (x, s) ϕk (ui ).
+
+
+
+
+A.1 Calculation of the normalizing constant
+
+Integrating over each cell and using γj + λj uj = δj and γj + λj uj+1 = δj+1 ,
+
+                                                       N
+                                                       X −1              Z uj+1
+                              exp{ψθ (x, s)} =                exp(γj )            exp(λj y) dy              (S2)
+                                                       j=0                uj
+
+                                                       N −1
+                                                       X   exp(δj+1 ) − exp(δj )
+                                                   =                             ,                          (S3)
+                                                       j=0
+                                                                    λ j
+
+
+
+
+                                                               29
+where a summand with λj = 0 is its limit ∆N exp(δj ). In the implementation, we subtract maxj δj
+
+from every δj before exponentiation and add it back after taking the logarithm, which avoids overflow.
+
+Since at most two of the ϕj (wx,s ) and at most two of the ϕj (s) are nonzero, each δi combines at most
+
+four coefficients, and ψθ (x, s) costs O(N ) operations.
+
+
+A.2 Calculation of Mean
+
+By (S2) and integration by parts,
+
+                                                     N
+                                                     X −1              Z uj+1
+               E(y | x, s) = exp{−ψθ (x, s)}                exp(γj )            y exp(λj y) dy
+                                                     j=0                uj
+
+                                                     N −1                                  
+                                                     X         uj+1   1  δj+1  uj   1  δj
+                            = exp{−ψθ (x, s)}                       − 2 e     −     − 2 e ,
+                                                     j=0
+                                                                λj   λj          λj  λj
+
+
+where a summand with λj = 0 is replaced by eδj (u2j+1 − u2j )/2.
+
+
+A.3 Calculation of quantiles
+
+Let tη be the η quantile of fθ (· | x, s) for η ∈ (0, 1), and let Sj be the sum of the first j summands in
+
+(S3), with S0 = 0. Let j0 ∈ {0, . . . , N − 1} be the largest index with Sj0 ≤ η exp{ψθ (x, s)}, so that
+
+uj0 ≤ tη < uj0 +1 . By (S2), tη solves
+
+                                              Z tη
+                            Sj0 + exp(γj0 )          exp(λj0 y) dy = η exp{ψθ (x, s)}.
+                                               uj0
+
+
+
+For λj0 ̸= 0 the integral equals {exp(γj0 + λj0 tη ) − exp(δj0 )}/λj0 , so
+
+
+                         log Rη − γj0                                       
+                  tη =                ,       Rη = λj0 η exp{ψθ (x, s)} − Sj0 + exp(δj0 ).
+                              λj0
+
+
+For λj0 = 0, tη = uj0 + e−δj0 η exp{ψθ (x, s)} − Sj0 .
+                                                   
+
+
+
+
+                                                             30
+Supplement B: Proof of Theorem 3.1
+
+The proof verifies the three conditions of Theorem 2.1 in Ghosal, Ghosh, and van der Vaart (2000).
+
+Lemma B.1 bounds the Hellinger distance, the Kullback–Leibler divergence and the Kullback–Leibler
+
+variation by the sup norm distance between log densities. This distance is split into the error of the
+                                                (0)
+Gaussian process Gl in approximating gl , the error of its linear interpolation gl in approximating Gl ,
+
+and the error caused by β ̸= β (0) . These are controlled by Lemma B.2, Lemma B.3 and the Gaussian
+
+prior on β, respectively. The interpolation error must be negligible compared with the small ball
+
+probability of the Gaussian process, which determines how fast N must grow. Section B.1 states the
+
+three conditions, Section B.2 collects the lemmas, Section B.3 fixes εn , κn and N , and Sections B.4
+
+to B.6 verify the conditions.
+                                                                                                    (0)
+       Let B = maxs∈S ∥β (0) (s)∥2 , so that xT β (0) (s) ∈ [−B, B] for ∥x∥2 ≤ 1. So g1 enters log Υ0 only
+                                                                              (0)         (0)       (0)   (0)
+on [0, 1]×[−B, B], where it is α-Hölder. If B = 0, we replace g2 by g1 (·, 0)+g2 , g1 by 0 and each
+                                                                                    (0)
+β (0) (s) by a unit vector, so that B = 1. With β̃ (0) (s) = β (0) (s)/B, wx,s = (xT β̃ (0) (s)+1)/2 ∈ [0, 1] and
+ (0)                (0)                                           (0)                       (0)   (0)
+g̃1 (y, w) = g1 (y, B(2w−1)) ∈ Cα [0, 1]2 , we have g1 (y, xT β (0) (s)) = g̃1 (y, wx,s ) and ∥β̃ (0) (s)∥2 ≤ 1.
+              (0)              (0)
+We write g1 and β (0) for g̃1 and β̃ (0) below.
+
+
+B.1 Reduction to three conditions
+
+Write Zi = {xi , (yis )s∈S }. By the sampling assumption in Section 3, Z1 , . . . , Zn are i.i.d. with density
+
+
+                                          Y
+                               qθ (z) =         fθ (ys | x, s),         z = {x, (ys )s∈S },
+                                          s∈S
+
+
+
+with respect to H0 ⊗ LebK , and the true density q0 is defined analogously with f0 . Let H denote the
+                                                                     R
+Hellinger distance between two densities. For fixed x, let as (x) = {fθ1 (y | x, s)fθ2 (y | x, s)}1/2 dy ∈
+
+[0, 1]. Then d2h (fθ1 , fθ2 ) = 2K −1 s {1 − as } dH0 and H2 (qθ1 , qθ2 ) = 2 {1 − s as } dH0 . Since
+                                     P R                                     R      Q
+
+
+
+
+                                                            31
+                       Q            P
+maxs (1 − as ) ≤ 1 −       s as ≤     s (1 − as ),
+
+
+
+
+                                    d2h (fθ1 , fθ2 ) ≤ H2 (qθ1 , qθ2 ) ≤ K d2h (fθ1 , fθ2 ).                (S4)
+
+
+
+Define
+
+
+                                      XZ
+                                 −1
+              KL(f0 , f ) = K                 log (f0 (y | x, s)/f (y | x, s)) f0 (y | x, s) dy dH0 (x),
+                                      s∈S
+                                      XZ
+                                 −1
+               V(f0 , f ) = K                 log2 (f0 (y | x, s)/f (y | x, s)) f0 (y | x, s) dy dH0 (x).
+                                      s∈S
+
+
+                          P
+Since log(q0 /qθ )(z) =       s log(f0 /fθ )(ys | x, s), we have KL(q0 , qθ ) = K KL(f0 , fθ ), and the Cauchy–
+
+
+Schwarz inequality gives V(q0 , qθ ) ≤ K 2 V(f0 , fθ ). It suffices to find constants A, C ′ > 0 and, for
+
+every C > 0, a sieve Fn ⊂ F such that for all large n
+
+
+
+                                                                      Π(Fnc ) ≤ exp −C nε2n ,
+                                                                                           
+                                                                                                            (S5)
+
+                                                         log C(εn , Fn , dh ) ≤ nε2n ,                      (S6)
+
+                          Π(f : KL(f0 , f ) ≤ Aε2n , V(f0 , f ) ≤ Aε2n ) ≥ exp (− C ′ nε2n ),               (S7)
+
+
+
+where Π is the prior and C(ε, ·, d) is the ε covering number. We call these the sieve condition, the
+
+metric entropy condition and the KL condition. By (S4) and the relations for KL and V above,
+                                                                           √
+these conditions with the sieve taken for C = (C ′ + 4)L2 and L = 2K max(1, A) give (2.2) to (2.4)
+
+of Ghosal, Ghosh, and van der Vaart (2000) for qθ at the rate Lεn , which satisfies Lεn → 0 and
+
+nL2 ε2n → ∞. Theorem 2.1 there gives contraction of qθ in H at this rate in probability, and hence of
+
+fθ in dh , since dh ≤ H. Since the posterior probability is at most one, this gives (9).
+
+   We represent the prior through Gaussian processes. Since σl2 is fixed, we set σl2 = 1 without loss
+
+of generality, as a fixed scale only changes the constants below. For fixed κ > 0, let Gκ : [0, 1]2 → R
+
+be a centered Gaussian process with covariance kernel K(z, z ′ ) = exp(−κ2 ∥z − z ′ ∥22 ). Given κl ,
+
+                                                              32
+let Gl be distributed as Gκl (l = 1, 2), with (G1 , κ1 ), (G2 , κ2 ) and β independent. Let T (g) :=
+            
+ g(ui , uj ) 0≤i,j≤N . Then T (Gl ) ∼ N (0, Γ) given κl (see Proposition 3 of Maatouk and Bay, 2017), so
+
+we take ξ (1) = T (G1 ) and ξ (2) = T (G2 ). Then the functions g1 , g2 in (3) are the linear interpolations
+
+of G1 , G2 on the grid,
+                                                   N
+                                                   X
+                                 gl (z1 , z2 ) =           T (Gl )ij ϕi (z1 )ϕj (z2 ) (l = 1, 2).                         (S8)
+                                                   i,j=0
+
+                                                            R1
+For a bounded measurable function v on [0, 1], let pv = ev / 0 ev(y) dy. Then fθ (· | x, s) = pvθ (·,x,s)
+
+and f0 (· | x, s) = pv0 (·,x,s) with the log densities
+
+
+                                                                                      (0)   (0)          (0)
+              vθ (y, x, s) = g1 (y, wx, s ) + g2 (y, s),             v0 (y, x, s) = g1 (y, wx, s ) + g2 (y, s).
+
+
+
+
+B.2 Auxiliary lemmas
+
+                  2                        PN
+For ξ ∈ R(N +1) , write gξ (z1 , z2 ) =        i,j=0 ξij ϕi (z1 )ϕj (z2 ), where the ϕj in (6) are defined on the whole
+
+
+real line. Then g1 = gξ(1) and g2 = gξ(2) .
+
+
+Lemma B.1.            (i) For all y ∈ [0, 1] and z, z ′ ∈ R,
+
+
+
+                  |gξ (y, z) − gξ′ (y, z)| ≤ ∥ξ − ξ ′ ∥∞ ,             |gξ (y, z) − gξ (y, z ′ )| ≤ 4N ∥ξ∥∞ |z − z ′ |.
+
+
+
+                                                                                                         ′
+ (ii) For bounded measurable functions v, v ′ on [0, 1], H(pv , pv′ ) ≤ ∥v −v ′ ∥∞ e∥v−v ∥∞ /2 . If ∥v −v ′ ∥∞ ≤
+
+      1, then KL(pv , pv′ ) ≤ C0 ∥v −v ′ ∥2∞ and V(pv , pv′ ) ≤ C0 ∥v −v ′ ∥2∞ for a universal constant C0 > 0.
+
+
+(iii) For θ̃ = (ξ˜(1) , ξ˜(2) , β̃) and θ = (ξ (1) , ξ (2) , β) in Θ, let
+
+
+
+                          dΘ (θ̃, θ) := ∥ξ˜(1) − ξ (1) ∥∞ + ∥ξ˜(2) − ξ (2) ∥∞ + 2N ∥ξ (1) ∥∞ ∥β̃ − β∥2 .
+
+
+
+      Then supy,x,s |vθ̃ − vθ | ≤ dΘ (θ̃, θ) and dh (fθ̃ , fθ ) ≤ dΘ (θ̃, θ) edΘ (θ̃,θ)/2 .
+
+   Here and below, the supremum is over y ∈ [0, 1], ∥x∥2 ≤ 1 and s ∈ S.
+
+                                                                  33
+                                                                      PN
+Proof. (i) The basis functions satisfy ϕj ≥ 0 and                       j=0 ϕj (z) ≤ 1 for all z ∈ R, with equality on [0, 1].
+
+
+Hence |gξ (y, z) − gξ′ (y, z)| ≤ ∥ξ − ξ ′ ∥∞                                                ′
+                                                        P             P
+                                                           i ϕi (y)        j ϕj (z) ≤ ∥ξ − ξ ∥∞ .   Each ϕj is piecewise linear
+
+with slopes 0 or ±1/∆N , so |ϕj (z) − ϕj (z ′ )| ≤ N |z − z ′ |. At most two of {ϕj (z)}j and at most two
+
+of {ϕj (z ′ )}j are nonzero. Therefore,
+
+
+                                                    X            X
+                   |gξ (y, z) − gξ (y, z ′ )| ≤         ϕi (y)       |ξij | |ϕj (z) − ϕj (z ′ )| ≤ 4N ∥ξ∥∞ |z − z ′ |.
+                                                    i            j
+
+
+
+(ii) Lemma 3.1 in van der Vaart and van Zanten (2008a) gives the Hellinger bound. It also gives
+                                         ′                                                                   ′
+KL(pv , pv′ ) ≲ ∥v − v ′ ∥2∞ e∥v−v ∥∞ (1 + ∥v − v ′ ∥∞ ) and V(pv , pv′ ) ≲ ∥v − v ′ ∥2∞ e∥v−v ∥∞ (1 + ∥v − v ′ ∥∞ )2 .
+
+Both right hand sides are at most a constant times ∥v − v ′ ∥2∞ when ∥v − v ′ ∥∞ ≤ 1.
+
+    (iii) Let w̃ = c((xT β̃(s) + 1)/2) and w = c((xT β(s) + 1)/2). Since c is 1-Lipschitz and ∥x∥2 ≤ 1,
+
+|w̃ − w| ≤ ∥β̃(s) − β(s)∥2 /2 ≤ ∥β̃ − β∥2 /2. By (i), for all (y, x, s),
+
+
+
+          |vθ̃ − vθ | ≤ |gξ̃(1) (y, w̃) − gξ(1) (y, w̃)| + |gξ(1) (y, w̃) − gξ(1) (y, w)| + |gξ̃(2) (y, s) − gξ(2) (y, s)|
+
+                      ≤ dΘ (θ̃, θ).
+
+
+
+Applying (ii) for each fixed (x, s), squaring, integrating with respect to H0 and averaging over s
+
+yields d2h (fθ̃ , fθ ) ≤ d2Θ (θ̃, θ) edΘ (θ̃,θ) .
+
+
+    In Lemmas B.2 and B.3, κ is fixed, G1 stands for Gκ and g1 for its interpolation (S8). Let Hκ be
+
+the reproducing kernel Hilbert space (RKHS) of G1 and Hκ1 its unit ball. Let B1 be the unit ball of
+                  
+ C[0, 1]2 , ∥ · ∥∞ and Φ the standard normal distribution function.
+
+
+Lemma B.2. Let g (0) ∈ Cα [0, 1]2 . There exist constants κ0 , ϵ0 , A1 , Cα > 0 depending only on g (0)
+
+and α such that the following hold for all κ ≥ κ0 and ϵ ≤ ϵ0 .
+
+
+  (a) − log Π(∥G1 ∥∞ < ϵ) ≤ A1 κ2 {log(κ/ϵ)}3 .
+
+
+  (b) If ϵ ≥ 2Cα κ−α , then − log Π(∥G1 − g (0) ∥∞ < ϵ) ≤ A1 κ2 {log(κ/ϵ)}3 .
+
+                                                                      34
+ (c) log C(ϵ, Hκ1 , ∥ · ∥∞ ) ≤ A1 κ2 {log(1/ϵ)}3 .
+
+
+ (d) ∥ζ∥∞ ≤ 1 for every ζ ∈ Hκ1 .
+
+
+                           / QHκ1 + ϵB1 ) ≤ 1 − Φ Φ−1 (Π(∥G1 ∥∞ < ϵ)) + Q .
+                                                                         
+ (e) For every Q ≥ 0, Π(G1 ∈
+
+
+ (f ) For 0 < κ ≤ r, Hκ1 ⊂ (r/κ) Hr1 and Π(∥Gκ ∥∞ < ϵ) ≥ Π(∥Gr ∥∞ < ϵ).
+
+
+Proof. The process G1 equals the rescaled process z 7→ Wκz in van der Vaart and van Zanten (2009),
+
+where W has covariance kernel exp(−∥z − z ′ ∥22 ). Its spectral measure has a Gaussian density, so it
+
+satisfies condition (3.3) of van der Vaart and van Zanten (2009) and its density is bounded away
+
+from zero near the origin. We take κ0 ≥ 1 and ϵ0 < 1/2. Part (a) follows from Lemma 4.6
+
+at ϵ/2, since Π(∥G1 ∥∞ < ϵ) ≥ Π(∥G1 ∥∞ ≤ ϵ/2) and log(2κ/ϵ) ≤ 2 log(κ/ϵ), after enlarging A1 ,
+
+and part (c) is Lemma 4.5 of van der Vaart and van Zanten (2009) with d = 2. By Lemma 4.3
+
+of van der Vaart and van Zanten (2009), there exist constants Cα , D > 0 such that inf{∥ζ∥2Hκ :
+
+∥ζ − g (0) ∥∞ ≤ Cα κ−α } ≤ Dκ2 . For ζ ∈ Hκ with ∥ζ − g (0) ∥∞ ≤ ϵ/2, the triangle inequality and
+
+Lemma 5.2 of van der Vaart and van Zanten (2008b) with the symmetric set {∥ · ∥∞ < ϵ/2} give
+                                                             2
+Π(∥G1 − g (0) ∥∞ < ϵ) ≥ Π(∥G1 − ζ∥∞ < ϵ/2) ≥ e−∥ζ∥Hκ /2 Π(∥G1 ∥∞ < ϵ/2). Hence
+
+
+                                                                    1
+               − log Π(∥G1 − g (0) ∥∞ < ϵ) ≤           inf            ∥ζ∥2Hκ − log Π(∥G1 ∥∞ < ϵ/2).
+                                                 ∥ζ−g (0) ∥∞ ≤ϵ/2   2
+
+
+If ϵ/2 ≥ Cα κ−α , the first term is at most Dκ2 /2, and part (a) bounds the second term. Enlarging A1
+
+gives (b). Part (d) follows from the reproducing property, since |ζ(z)| ≤ ∥ζ∥Hκ K(z, z)1/2 = ∥ζ∥Hκ .
+
+Part (e) is Borell’s inequality in Theorem 5.1 of van der Vaart and van Zanten (2008b). The first
+
+claim of (f) is Lemma 4.7 of van der Vaart and van Zanten (2009) with d = 2, which applies since
+
+the Gaussian spectral density is radially decreasing. For the second, ∥Gκ ∥∞ = supt∈[0,κ]2 |Wt | is
+
+nondecreasing in κ. Parts (d), (e) and (f) do not use κ ≥ κ0 or ϵ ≤ ϵ0 , so they hold for every κ > 0
+
+and ϵ > 0.
+
+
+                                                        35
+    Lemma B.3 bounds the interpolation error ∥g1 − G1 ∥∞ through the expected supremum of the
+
+increments of G1 over pairs of points that are at most 1/N apart in the sup norm.
+
+
+Lemma B.3. There exists a universal constant A0 > 0 such that for all κ > 0, N ≥ 1 and ϵ > 0
+
+with
+                                           A0 κ       √     1/2  ϵ
+                                                  log(2 2N )     ≤ ,                                             (S9)
+                                            N                     2
+
+we have
+                                                            N 2 ϵ2 
+                                   Π ∥g1 − G1 ∥∞ > ϵ ≤ 2 exp −         .                                       (S10)
+                                                               32 κ2
+
+Proof. Let PN = {(z, z ′ ) ∈ [0, 1]2 × [0, 1]2 : ∥z − z ′ ∥∞ ≤ 1/N } and ωN = sup(z,z′ )∈PN |G1 (z) − G1 (z ′ )|.
+
+We show that ∥g1 − G1 ∥∞ ≤ ωN , bound E ωN , and then apply Borell’s inequality.
+
+    The products ϕi (z1 )ϕj (z2 ) are nonnegative, sum to one on [0, 1]2 , and vanish unless ∥(z1 , z2 ) −
+
+(ui , uj )∥∞ < ∆N . Hence
+
+                                           N
+                                           X 
+                        g1 − G1 ∞ =                G1 (ui , uj ) − G1 (·) ϕi (·) ϕj (·)       ≤ ωN .
+                                           i,j=0                                          ∞
+
+
+
+    To bound E ωN , let dG (z, z ′ ) = {E(G1 (z) − G1 (z ′ ))2 }1/2 be the canonical metric of G1 . Since
+
+1 − e−x ≤ x for x ≥ 0,
+
+
+
+                           d2G (z, z ′ ) = 2 1 − exp(−κ2 ∥z − z ′ ∥22 ) ≤ 2κ2 ∥z − z ′ ∥22 .
+                                            
+                                                                                                               (S11)
+
+
+
+Consider the centered Gaussian process Y(z,z′ ) = G1 (z) − G1 (z ′ ) on PN . Since PN is symmetric in
+
+(z, z ′ ) and contains (z, z), ωN = supPN Y(z,z′ ) . Its canonical metric dY satisfies dY (z, z ′ ), (z̃, z̃ ′ ) ≤
+                                                                                                                    
+
+                                                         √
+dG (z, z̃) + dG (z ′ , z̃ ′ ). By (S11) and ∥z − z ′ ∥2 ≤ 2∥z − z ′ ∥∞ , we have {EY(z,z
+                                                                                     2
+                                                                                         ′)}
+                                                                                             1/2
+                                                                                                 = dG (z, z ′ ) ≤ 2κ/N
+
+on PN . So the dY diameter of PN is at most 4κ/N .
+
+    Let CY (ϵ) be the minimal number of dY balls of radius ϵ covering PN , and CG (r) the minimal
+
+number of dG balls of radius r covering [0, 1]2 . By Corollary 4.15 of Adler (1990), there exists a
+
+                                                           36
+universal constant A2 such that
+
+                                 Z ∞                               Z 4κ/N
+                                                    1/2                              1/2
+                     E ωN ≤ A2            log CY (ϵ)     dϵ = A2            log CY (ϵ)     dϵ,               (S12)
+                                   0                                0
+
+
+
+where the equality holds because CY (ϵ) = 1 for ϵ ≥ 4κ/N . If {zk } are the centers of CG (ϵ/4) balls
+
+covering [0, 1]2 , then each dY ball of radius ϵ/2 centered at (zk , zl ) that intersects PN is contained in
+
+a dY ball of radius ϵ centered at a point of PN . So CY (ϵ) ≤ CG (ϵ/4)2 . By (S11), a Euclidean ball of
+           √
+radius r/( 2κ) is contained in a dG ball of radius r. Each square of side r/κ lies in such a Euclidean
+                                                                                           √
+ball, and [0, 1]2 is covered by at most (1 + κ/r)2 of them. Hence CG (r) ≤ (1 + κ/r)2 ≤ (2 2κ/r)2 for
+     √
+r ≤ 2κ. Therefore, for ϵ ≤ 4κ/N ,
+
+                                                                      √
+                                                                     8 2κ
+                                 log CY (ϵ) ≤ 2 log CG (ϵ/4) ≤ 4 log      .
+                                                                       ϵ
+
+
+For A > 0 and 0 < a ≤ A/e, the substitution ϵ = Ae−y and integration by parts give
+
+     Z ar                 Z ∞                                      Z ∞                           r
+               A                                  n         1                       o   3              A
+            log dϵ = A          y 1/2 e−y dy = A x1/2 e−x +              y −1/2 e−y dy ≤ a       log     ,   (S13)
+      0        ϵ           x                                2       x                   2              a
+
+                                    R∞
+where x = log(A/a) ≥ 1 and we used x y −1/2 e−y dy ≤ x−1/2 e−x ≤ x1/2 e−x . We apply (S13) with
+     √                                   √
+A = 8 2κ and a = 4κ/N , for which A/a = 2 2N ≥ e. Then (S12) yields
+
+
+                                       3 4κ       √     1/2   A0 κ       √     1/2
+                    E ωN ≤ 2A2 ·        ·     log(2 2N )     =        log(2 2N )
+                                       2 N                      N
+
+
+with A0 = 12A2 .
+                                                                      2
+   Under (S9), E ωN ≤ ϵ/2. The variance of Y(z,z′ ) on PN is at most σN := 4κ2 /N 2 . By (2.6) in
+
+Theorem 2.1 of Adler (1990),
+
+
+                                              n       (ϵ − E ωN )2 o          N 2 ϵ2 
+                       Π(ωN > ϵ) ≤ 2 exp          −         2
+                                                                     ≤ 2 exp  −         .
+                                                          2σN                   32 κ2
+
+                                                         37
+Since ∥g1 − G1 ∥∞ ≤ ωN , this proves (S10).
+
+
+Lemma B.4. Suppose Z ∼ N (0, Σ) in Rd , and let λΣ and tr(Σ) denote the largest eigenvalue and
+                                p
+the trace of Σ. Then for any t > tr(Σ),
+
+                                                                     p      2 
+                                                              t−
+                                                      
+                                                                       tr(Σ)
+                               P (∥Z∥2 > t) ≤ 2 exp       −                     .
+                                                                     2λΣ
+
+
+Proof. Consider the centered Gaussian process Xu = uT Z indexed by the unit sphere {u ∈ Rd :
+
+∥u∥2 = 1}. Then supu Xu = ∥Z∥2 , supu EXu2 = supu uT Σu = λΣ , and E ∥Z∥2 ≤ (E ∥Z∥22 )1/2 =
+p                                                               p
+  tr(Σ). Hence, by (2.6) in Theorem 2.1 of Adler (1990), for t > tr(Σ),
+
+                                                          2                           p      2 
+                                            t − E ∥Z∥2                             t−
+                                                                          
+                                                                                         tr(Σ)
+              P ∥Z∥2 > t ≤ 2 exp          −                      ≤ 2 exp       −                    .
+                                                2λΣ                                     2λΣ
+
+
+
+
+Lemma B.5. For all large r, Π(κl > r) ≤ exp{−(D2 /2) r2 (log r)4 } (l = 1, 2).
+
+
+Proof. The density πκ satisfies (3.4) of van der Vaart and van Zanten (2009) with d = 2 and q = 4. By
+
+Lemma 4.9 of van der Vaart and van Zanten (2009), Π(κl > r) ≤ C2 rpκ −1 exp{−D2 r2 (log r)4 }/{D2 (log r)4 }
+
+for all large r. The factor in front of the exponential is at most exp{(D2 /2)r2 (log r)4 } for large r.
+
+
+B.3 Choice of εn , κn and N
+
+                α         2α                  −1/α               1             2
+Let εn = n− 2α+2 (log n) α+1 and κn = cκ εn          = cκ n 2α+2 (log n)− α+1 with cκ = (10Cα )1/α . Here
+                                                                                        (0)               (0)
+Cα and A1 are the larger of the constants in Lemma B.2 for g (0) = g1                         and g (0) = g2 . The
+
+constants C1 , C2 , D1 , D2 and pκ are those of πκ in Theorem 3.1, and N ≍ n. The KL condition uses
+
+κn ≤ κ ≤ 2κn , and the sieve uses 1 ≤ κ ≤ cr κn for a constant cr fixed in Section B.4. The rest of the
+
+proof uses the following three properties, which hold for all large n.
+
+
+(P1) εn ≥ 10 Cα κ−α for every κ ≥ κn . This holds because κ−α ≤ κ−α   −α
+                                                                 n = cκ εn .
+
+
+                                                     38
+(P2) κ2n (log n)4 = c2κ nε2n , and hence κ2n (log n)3 + log n = o(nε2n ). The equality holds because κ2n =
+          1              4                    1           4α
+     c2κ n α+1 (log n)− α+1 and nε2n = n α+1 (log n) α+1 .
+
+
+(P3) N satisfies
+
+
+      A0 κ       √     1/2  εn                   N 2 ε2n        2
+                                                                                3
+             log(2 2N )     ≤ ,                          2
+                                                           ≥ A1 κ    log(10κ/εn ) + log 4 for all κn ≤ κ ≤ 2κn .
+       N                     10                   800 κ
+                                                                                                               (S14)
+
+     Both inequalities become tighter as κ grows, so it suffices to check them at κ = 2κn . The
+
+     first then holds when N ≳ κn (log n)1/2 /εn ≍ n1/2 (log n)−3/2 . The second holds when N ≳
+                               α+2            α+5
+     κ2n (log n)3/2 /εn ≍ n 2α+2 (log n)− 2α+2 . Since 2α+2
+                                                       α+2
+                                                            < 1 for α > 0, both hold under N ≍ n.
+
+
+Since κn → ∞ and εn → 0, Lemma B.2 applies to every κ ≥ κn for large n. The quantities κn /εn ,
+
+N , and Qn and Tn below grow at most polynomially in n, so their logarithms are O(log n).
+
+
+B.4 Sieve condition
+
+Fix a constant C > 0. Let rn = cr κn , where the constant cr ≥ 1 satisfies D2 c2r c2κ ≥ 2(2α + 3)4 C.
+
+Define
+
+
+                                  εn                        2
+                                                                                   p               p
+          Bn = Qn rn Hr1n +                 Qn = −2Φ−1 e−Cnεn ,
+                                                                                                          
+                                     B1 ,                                   Tn =       tr(Σ) 1 +    2Cnε2n ,
+                                  12
+
+
+              Θn = {(ξ (1) , ξ (2) , β) : ξ (1) , ξ (2) ∈ T (Bn ), ∥β∥2 ≤ Tn },    Fn = {fθ : θ ∈ Θn }.
+
+                 2                            √
+Since Φ(−t) ≤ e−t /2 for t ≥ 0, we have Qn ≤ 2 2Cn εn . By Lemma B.2 (d), every g ∈ Bn satisfies
+
+∥g∥∞ ≤ Qn rn + 1. As ∥T (g)∥∞ ≤ ∥g∥∞ ,
+
+
+
+                                ∥ξ (1) ∥∞ ≤ Qn rn + 1 for all (ξ (1) , ξ (2) , β) ∈ Θn .                       (S15)
+
+
+
+
+                                                            39
+Since θ ∈ Θn implies fθ ∈ Fn ,
+
+
+
+                      Π(Fnc ) ≤ Π(Θcn ) ≤ Π(G1 ∈
+                                               / Bn ) + Π(G2 ∈
+                                                             / Bn ) + Π(∥β∥2 > Tn ).
+
+
+
+Since log rn ≥ log κn ≥ (log n)/(2α + 3) for large n, Lemma B.5, (P2) and the choice of cr give Π(κl >
+                                                             2
+rn ) ≤ exp{−D2 c2r κ2n (log n)4 /(2(2α + 3)4 )} ≤ e−Cnεn . Let 1 ≤ κ ≤ rn . By Lemma B.2 (f), Qn Hκ1 ⊂
+
+(Qn rn /κ)Hr1n ⊂ Qn rn Hr1n , so Π(Gκ ∈             / Qn Hκ1 + ε12n B1 ). By Lemma B.2 (f) and (a) and
+                                      / Bn ) ≤ Π(Gκ ∈
+
+by (P2), − log Π(∥Gκ ∥∞ < εn /12) ≤ − log Π(∥Grn ∥∞ < εn /12) ≤ A1 c2r κ2n {log(12cr κn /εn )}3 ≤ Cnε2n
+
+for large n. Hence Φ−1 (Π(∥Gκ ∥∞ < εn /12)) ≥ −Qn /2, and Lemma B.2 (e) gives Π(Gκ ∈
+                                                                                   / Bn ) ≤
+                         2                                                                                   2
+1 − Φ(Qn /2) = e−Cnεn . Therefore Π(Gl ∈                                     / Bn ) ≤ 2e−Cnεn for
+                                       / Bn ) ≤ Π(κl > rn ) + sup1≤κ≤rn Π(Gκ ∈
+
+l = 1, 2. For β ∼ N (0, Σ) with Σ in (7), λΣ ≤ tr(Σ) since Σ is positive semidefinite, and Lemma B.4
+                                  2                                  2
+gives Π(∥β∥2 > Tn ) ≤ 2e−Cnεn . Therefore Π(Fnc ) ≤ 6e−Cnεn . Since C is arbitrary, the same argument
+
+with C + 2 in place of C gives (S5) for large n.
+
+
+B.5 Metric entropy condition
+
+Let Gn be an εn /6 net of Bn with respect to ∥ · ∥∞ , and Mn an εn /{12N (Qn rn + 1)} net of {β ∈ RpK :
+
+∥β∥2 ≤ Tn } with respect to ∥ · ∥2 . Since ∥T (g) − T (g ′ )∥∞ ≤ ∥g − g ′ ∥∞ , for any θ = (ξ (1) , ξ (2) , β) ∈ Θn
+
+there exists θ̃ = (T (g̃1 ), T (g̃2 ), β̃) with g̃1 , g̃2 ∈ Gn , β̃ ∈ Mn and
+
+
+                                                                                               εn
+           ∥ξ (1) − T (g̃1 )∥∞ ≤ εn /6,    ∥ξ (2) − T (g̃2 )∥∞ ≤ εn /6,    ∥β − β̃∥2 ≤                   .
+                                                                                         12N (Qn rn + 1)
+
+
+By Lemma B.1 (iii) applied to (θ̃, θ), and by (S15), dΘ (θ̃, θ) ≤ εn /2 and thus dh (fθ̃ , fθ ) ≤ (εn /2) e1/4 <
+
+εn . Using Corollary 4.2.11 of Vershynin (2026) for the β part,
+
+
+                                                                             24N (Qn rn + 1)Tn 
+             log C(εn , Fn , dh ) ≤ 2 log C(εn /6, Bn , ∥ · ∥∞ ) + pK log 1 +                     .
+                                                                                     εn
+
+
+
+
+                                                          40
+An εn /12 net of Qn rn Hr1n is an εn /6 net of Bn . So Lemma B.2 (c) with κ = rn gives
+
+
+                                                                                                        3
+            log C(εn /6, Bn , ∥ · ∥∞ ) ≤ log C εn /(12Qn rn ), Hr1n , ∥ · ∥∞ ≤ A1 rn2 log(12Qn rn /εn ) .
+                                                                                    
+
+
+
+
+Hence log C(εn , Fn , dh ) ≲ c2r κ2n (log n)3 + log n, which is o(nε2n ) by (P2). This gives (S6) for large n.
+
+
+B.6 KL condition
+
+By Lemma B.1 (ii), applied for each (x, s) and then integrated,
+
+
+                   n                    o n                                               o
+                                                                  2                     2
+                    θ : sup vθ − v0 ≤ εn ⊂ θ : KL(f0 , fθ ) ≤ C0 εn , V(f0 , fθ ) ≤ C0 εn .                           (S16)
+                         y,x,s
+
+
+
+
+Hence (S7) with A = C0 follows from a lower bound on the prior probability of the event on the left
+
+hand side.
+                                                             (0)                 (0)      (0)
+   Since ∥x∥2 ≤ 1 and ∥β (0) (s)∥2 ≤ 1, wx,s ∈ [0, 1], so wx,s = c(wx,s ). Since c is 1-Lipschitz,
+             (0)
+|wx,s − wx,s | ≤ ∥β − β (0) ∥2 /2. By Lemma B.1 (i),
+
+
+                                             (0)             (0)            (0)
+                                                                             (0)                          (0)
+           vθ − v0 ≤ g1 (y, wx,s ) − g1 (y, wx,s ) + g1 (y, wx,s ) − g1 (y, wx,s ) + g2 (y, s) − g2 (y, s)
+                                                            2 
+                                                            X                                   
+                                 (1)           (0)                                       (0)
+                    ≤ 2N ∥ξ ∥∞ ∥β − β                ∥2 +          gl − Gl ∞ +     Gl − gl ∞        .
+                                                            l=1
+
+
+
+Define the events
+
+
+       n
+                 (0)
+                                                       o                              n                         εn            o
+El =        Gl −gl ∞ < εn /5,          gl −Gl ∞ ≤ εn /5 (l = 1, 2),               Eβ = ∥β−β (0) ∥2 ≤            (0)
+                                                                                                                               .
+                                                                                                        10N (∥g1 ∥∞ + 1)
+
+                                         (0)
+On E1 , ∥ξ (1) ∥∞ ≤ ∥G1 ∥∞ ≤ ∥g1 ∥∞ + 1. So sup |vθ − v0 | ≤ εn on E1 ∩ E2 ∩ Eβ . Since (G1 , κ1 ),
+
+(G2 , κ2 ) and β are independent a priori,
+
+
+                                                                   
+                                            2                     2
+                       Π KL(f0 , fθ ) ≤ C0 εn , V(f0 , fθ ) ≤ C0 εn ≥ Π(E1 ) Π(E2 ) Π(Eβ ).                           (S17)
+
+                                                                   41
+      Since Σ is positive definite, the density of N (0, Σ) is bounded below by a positive constant on
+
+{β : ∥β − β (0) ∥2 ≤ 1}. The radius of Eβ decays polynomially in n. Hence Π(Eβ ) ≥ exp(−Cβ log n)
+
+for some constant Cβ > 0.
+
+      For El , Π(El ) ≥ Π(κl ∈ [κn , 2κn ]) inf κn ≤κ≤2κn Π(El | κl = κ). Fix κ ∈ [κn , 2κn ] and write g κ for
+
+the interpolation of Gκ . Then
+
+
+                                                 (0)
+                       Π(El | κl = κ) ≥ Π ∥Gκ − gl ∥∞ < εn /5 − Π ∥g κ − Gκ ∥∞ > εn /5 .
+                                                                                     
+                                                                                                              (S18)
+
+
+
+By (P1) and Lemma B.2 (b) with ϵ = εn /5, the first term is at least exp[−A1 κ2 {log(5κ/εn )}3 ].
+
+By (P3) and Lemma B.3 with ϵ = εn /5, the second term is at most 2 exp{−N 2 ε2n /(800κ2 )} ≤
+1
+2
+  exp[−A1 κ2 {log(10κ/εn )}3 ]. Hence
+
+
+                                          1                               1
+                    Π(El | κl = κ) ≥        exp[−A1 κ2 {log(10κ/εn )}3 ] ≥ exp{−4A1 κ2n (log n)3 },
+                                          2                               2
+
+
+since κ ≤ 2κn and 20κn /εn ≤ n for large n. For large n, πκ (κ) ≥ C1 κpnκ exp{−4D1 κ2n (log 2κn )4 }
+
+on [κn , 2κn ], so Π(κl ∈ [κn , 2κn ]) ≥ exp{−5D1 κ2n (log n)4 }. Hence Π(El ) ≥ 12 exp{−4A1 κ2n (log n)3 −
+
+5D1 κ2n (log n)4 }.
+
+      Plugging these bounds into (S17) and using (P2),
+
+
+                                                             1    h                                            i
+  Π       KL(f0 , fθ ) ≤ C0 ε2n , V(f0 , fθ ) ≤ C0 ε2n                         2   3        2        4
+                                                             ≥ exp − 8A1 κn (log n) − 10D1 κn (log n) − Cβ log n
+                                                               4
+                                                             ≥ exp −C ′ nε2n
+                                                                             
+
+
+
+
+with C ′ = 10D1 c2κ + 1 and all large n. This verifies (S7) and completes the proof of Theorem 3.1.
+
+
+
+
+                                                                  42
+B.7 A growing number of covariates
+
+Theorem 3.1 fixes p and K. The number of covariates enters the proof only through β ∈ RpK , and
+
+the corollary below lets p = pn grow with n. The covariates are bounded coordinatewise and the true
+
+index coefficients have unit ℓ1 norm, so the true index xT β (0) (s) stays in [−1, 1] for every pn , and the
+                                        (0)
+scale of the index is absorbed into g1 .
+
+Corollary B.6. Let p = pn and let H0 be supported on {x ∈ Rpn : ∥x∥∞ ≤ 1}. Suppose that
+                    (0)                       (0)                     (0)                                       (0)
+log Υ0 (y, x, s) = g1 (y, xT β (0) (s)) + g2 (y, s), where g1                is α-Hölder on [0, 1] × [−1, 1], g2     is α-
+
+Hölder, neither depends on n, and maxs∈S ∥β (0) (s)∥1 = 1. Under the prior of Theorem 3.1 with K
+
+fixed, if pn K log n = o(nε2n ), then (9) holds with the same εn .
+                    1         4α
+   Since nε2n = n α+1 (log n) α+1 , the condition is
+
+
+                                                    1         3α−1 
+                                          pn = o n α+1 (log n) α+1 ,
+
+
+
+for example pn = o{n1/3 (log n)5/3 } when α = 2.
+
+Proof. We follow the proof of Theorem 3.1 and give only the steps that change. Since |xT β (0) (s)| ≤
+                                                                                                                      (0)
+∥x∥∞ ∥β (0) (s)∥1 ≤ 1, the rescaling at the start of Supplement B applies with B = 1, so wx,s =
+                                                    (0)                (0)
+(xT β (0) (s) + 1)/2 ∈ [0, 1], the rescaled g̃1 (y, w) = g1 (y, 2w − 1) does not depend on n, and
+
+∥β (0) (s)∥2 ≤ ∥β (0) (s)∥1 ≤ 1. Hence Lemmas B.2 and B.3 apply with the same constants, and
+
+the choice of εn , κn and N in Section B.3 is unchanged.
+                            √                             √
+   For ∥x∥∞ ≤ 1, ∥x∥2 ≤         pn , so |w̃ − w| ≤            pn ∥β̃ − β∥2 /2 in the proof of Lemma B.1 (iii). That
+                                                                               √
+lemma then holds with dΘ replaced by ∥ξ˜(1) − ξ (1) ∥∞ + ∥ξ˜(2) − ξ (2) ∥∞ + 2N pn ∥ξ (1) ∥∞ ∥β̃ − β∥2 , and
+
+the supremum is over ∥x∥∞ ≤ 1.
+
+   The sieve condition holds as before, since Lemma B.4 and λΣ ≤ tr(Σ) hold in any dimension.
+
+Here tr(Σ) = σβ2 Kpn , and pn ≤ n for large n, so Tn still grows polynomially in n.
+                                                               √
+   For the metric entropy condition, Mn is taken as an εn /{12N pn (Qn rn + 1)} net, so that the
+
+                                                               43
+                                                                                       √
+modified dΘ (θ̃, θ) ≤ εn /2 as before. The β part of the bound becomes pn K log{1 + 24N pn (Qn rn +
+
+1)Tn /εn }, and the logarithm in it is O(log n). Hence log C(εn , Fn , dh ) ≲ c2r κ2n (log n)3 + pn K log n,
+
+which is o(nε2n ) by (P2) and the assumption.
+                                     (0)    √
+   For the KL condition, |wx,s − wx,s | ≤    pn ∥β − β (0) ∥2 /2, so the first term of the bound on |vθ − v0 |
+          √                                                                          √      (0)
+becomes 2N pn ∥ξ (1) ∥∞ ∥β−β (0) ∥2 , and Eβ is defined with the radius bn = εn /{10N pn (∥g1 ∥∞ +1)}.
+
+The covariance Σ in (7) is positive definite, so the RKHS of N (0, Σ) on (Rpn K , ∥ · ∥2 ) is Rpn K with
+
+the norm (hT Σ−1 h)1/2 . Lemma 5.2 of van der Vaart and van Zanten (2008b) with the symmetric set
+
+{b : ∥b∥2 ≤ bn } gives
+
+                            Π(Eβ ) ≥ exp − β (0)T Σ−1 β (0) /2 Π(∥β∥2 ≤ bn ).
+                                                              
+
+
+
+The eigenvalues of Σ = σβ2 Γβ ⊗ Ipn are those of σβ2 Γβ , which do not depend on n since K is fixed.
+
+Let λmin and λmax be the smallest and the largest. Then β (0)T Σ−1 β (0) ≤ ∥β (0) ∥22 /λmin ≤ K/λmin .
+                                                                         1/2
+Write β = Σ1/2 Z with Z ∼ N (0, Id ) and d = pn K. Since ∥β∥2 ≤ λmax ∥Z∥2 ≤ (λmax d)1/2 ∥Z∥∞ , with
+
+tn = bn /(λmax d)1/2 ,
+
+
+
+                     Π(∥β∥2 ≤ bn ) ≥ P (∥Z∥∞ ≤ tn ) = {2Φ(tn ) − 1}d ≥ {2ϕ(1) tn }d ,
+
+
+
+where ϕ is the standard normal density, and the last step holds because ϕ ≥ ϕ(1) on [−tn , tn ] when
+
+tn ≤ 1, which is true for large n. Since 1/tn grows polynomially in n, − log Π(Eβ ) ≤ Cβ pn K log n for
+
+a constant Cβ and all large n. This replaces the bound Π(Eβ ) ≥ exp(−Cβ log n) of Section B.6, and
+
+since pn K log n = o(nε2n ), the final bound there still gives (S7) with C ′ = 10D1 c2κ + 1.
+
+
+
+
+                                                     44
+Supplement C: Details of the numerical experiments
+
+C.1 Benchmark methods
+
+The full grid LGP models fθ (y | x, s) ∝ exp{g(y, x, s)} with a single function g. Each covariate is
+
+rescaled to uj = (xj − aj )/(bj − aj ) ∈ [0, 1], where [aj , bj ] is its range over all individuals, and g is
+
+represented by linear interpolation on a tensor grid,
+
+                                    N X
+                                      Ns                                          p
+                                    X            X                                Y
+                     g(y, x, s) =                            ζirt ϕN      Ns
+                                                                   i (y) ϕr (s)         ϕm−1
+                                                                                         tj  (uj ),                   (S19)
+                                    i=0 r=0 t∈{0,...,m−1}p                        j=1
+
+
+
+                                                                                       ⊗p
+where ϕM                                                                   2
+       i is the hat basis (6) with Nl replaced by M . We assign ζ ∼ N (0, σ Γy ⊗ Γs ⊗ Γx ), where
+
+
+each Γ is the correlation matrix of a one dimensional Matérn kernel with ν = 5/2 and ℓ = 0.292 at
+
+the knots of its axis, and σ 2 ∼ IG(aσ , bσ ). For fixed (x, s), the exponent is piecewise linear in y, so
+
+the normalizing constant is computed exactly as in Supplement A.1. The sampler alternates an ESS
+
+update of ζ and a conjugate update of σ 2 , as for ExFR-LGP.
+
+   We use N = 50 and Ns = 10, with m = 3 in Section 5 and m = 2 in Section 6. Hence ζ has
+
+(N + 1)(Ns + 1)mp entries, 51 · 11 · 35 = 136,323 for p = 5 and 51 · 11 · 27 = 71,808 for p = 7, against
+
+2(N + 1)2 = 5,202 for ExFR-LGP.
+
+   The spLGP of Section 5 sets zis = (xTi , s − 1/2)T /c, where c is the largest norm of (xTi , s − 1/2)T
+
+over all individuals and locations, and models fθ (y | xi , s) ∝ exp{g(y, wis )} with wis = (zTis β + 1)/2.
+
+The function g has the representation (5) with N = 50, the Matérn kernel and the variance prior of
+
+ExFR-LGP, and β ∼ N (0, Ip+1 ) enters the likelihood through β/∥β∥2 . It is the sampler of Section 4.2
+
+applied to the nK pairs (zis , yis ) without g2 , under the same budget as ExFR-LGP.
+
+   LSBP (Rigon and Durante, 2021) models z = logit(y), standardized by its mean and standard
+                                                         PH
+deviation over the training data, by the mixture              h=1 πh (x, s) N {z; a
+                                                                                        T
+                                                                                            γh , τh−1 } with a = (1, xT , s −
+                                                     Q
+1/2)T and H = 20. The weights are πh = νh                l<h (1 − νl ) with logit νh = b
+                                                                                                   T
+                                                                                                       αh , where b holds 1,
+
+
+                                                         45
+x and a natural cubic spline basis of s with three degrees of freedom, and νH = 1. Following the
+
+tutorial of the package, γh ∼ N (0, I), αh ∼ N (0, I) and τh ∼ Gamma(1, 1). We run its Gibbs sampler
+
+for 2000 burn-in and 2000 posterior iterations, and transform each density back to the scale of y.
+
+Since a mixture has no piecewise linear exponent, its densities are evaluated on a grid of 2001 points
+
+from every fourth posterior draw and interpolated linearly to the grid of Section 5.
+
+
+C.2 Coverage of the credible band
+
+For each test individual x and location s, the coverage of the band is the probability, under Y ∼
+
+f0 (· | x, s), that the band contains f0 (Y | x, s), and we average it over the test individuals and the
+
+locations. Averaged over all settings of Section 5, the coverage is 0.92 and 0.87 for ExFR-LGP in
+
+Case 1 and Case 2, against 0.84 and 0.82 for LSBP, 0.58 and 0.55 for the spLGP and 0.22 and 0.30
+
+for the full grid LGP.
+
+
+C.3 Dependence across locations
+
+Model (2) treats the responses of one individual as independent given xi . To see how dependence
+
+along the tract affects the fit, we generate Case 1 (17) with n = 250 and K = 20 so that the responses
+
+of one individual are correlated across locations. For each individual i, we draw (zi1 , . . . , ziK ) from
+                                                                                       ′
+a normal distribution with mean zero, unit variances and corr(zik , zik′ ) = ρ|k−k | , and set yisk =
+
+F0−1 {Φ(zik ) | xi , sk }, where Φ is the standard normal CDF and F0 (· | x, s) is the CDF of (17). Each
+
+yisk then still has the density (17), and ρ = 0 gives the independent responses of Section 5. For
+
+each ρ ∈ {0, 0.5, 0.9} we fit ExFR-LGP to 50 datasets as in Section 5. Table C.1 reports the error,
+
+the share of test responses in the central 80% and 95% intervals of fb, and the coverage of the 95%
+
+credible band of Supplement C.2.
+
+   The predictive intervals keep their nominal coverage for every ρ, since the dependence does not
+
+change the conditional density at each location, which is the target of model (2). The error grows
+
+with ρ because correlated responses carry less information than independent ones, and the credible
+
+                                                    46
+Table C.1: Case 1 with n = 250 and K = 20 under dependence across locations, averaged over 50
+replications. Prediction coverage is the share of test responses in the central 80% and 95% intervals
+of fb, and band coverage is that of the 95% credible band.
+
+                ρ Sq. Hellinger dist.    80% prediction    95% prediction    95% band
+                0      0.0080                0.803             0.954           0.89
+               0.5     0.0104                0.792             0.953           0.82
+               0.9     0.0165                0.787             0.950           0.69
+
+
+band becomes narrower than the actual uncertainty, since the posterior treats the K responses of an
+
+individual as independent.
+
+
+C.4 Posterior contrast in the ADNI data
+
+Figure C.1 shows the difference in the median of fθ (· | x, s) between an AD and a CN individual (AD
+
+minus CN) of Section 6, whose other covariates are at their overall averages. The posterior median
+
+from all individuals is negative at all 83 locations, from −0.086 to −0.007, in line with the known
+
+decline of FA with Alzheimer’s disease (Sexton et al., 2011). The fits to the five training sets follow
+
+the fit to all individuals, and only one of them changes sign, at three locations near location 70.
+
+
+
+
+Figure C.1: Difference in the median of fθ (· | x, s) between an AD and a CN individual (AD minus
+CN) along the tract, with MMSE and the other covariates at their overall averages. The thick line
+is the posterior median from all 213 individuals, and the thin lines are those from five training sets
+that each leave out one fifth of the individuals.
+
+
+
+                                                  47
+
